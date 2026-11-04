@@ -1,19 +1,6 @@
 {
   "accounts": [
     {
-      "id": "user-galaxy505g",
-      "username": "galaxy505g",
-      "tag": "5050",
-      "email": "sharozayan9@gmail.com",
-      "password": "password123",
-      "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=galaxy505g",
-      "bio": "Galaxy Cord Super Administrator 🛡️",
-      "status": "online",
-      "customStatus": "Managing Galaxy Cord 🛡️",
-      "role": "admin",
-      "createdAt": 1788612752710
-    },
-    {
       "id": "user-elena",
       "username": "Elena Rostova",
       "tag": "1001",
@@ -23,8 +10,85 @@
       "bio": "Competitive gamer & screen share streamer 🎮",
       "status": "online",
       "customStatus": "Screen sharing gameplay 🎮",
-      "createdAt": 1789895105448,
-      "role": "member"
+      "role": "member",
+      "createdAt": 1790344295163,
+      "isBanned": false,
+      "banReason": null,
+      "banExpiresAt": null,
+      "timedOutUntil": null,
+      "timeoutReason": null
+    },
+    {
+      "id": "user-galaxy505g",
+      "username": "galaxy505g",
+      "tag": "5050",
+      "email": "sharozayan9@gmail.com",
+      "password": "password123",
+      "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=galaxy505g",
+      "bio": "Galaxy Cord Super Administrator 🛡️",
+      "status": "online",
+      "customStatus": "Managing Galaxy Cord on Neon 🛡️",
+      "role": "admin",
+      "createdAt": 1788616295163,
+      "isBanned": false,
+      "banReason": null,
+      "banExpiresAt": null,
+      "timedOutUntil": null,
+      "timeoutReason": null
+    },
+    {
+      "id": "usr-rn2rdy",
+      "username": "EchoPilot",
+      "tag": "5383",
+      "email": null,
+      "password": null,
+      "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=usr-rn2rdy",
+      "bio": null,
+      "status": "online",
+      "customStatus": "Exploring Galaxy Cord",
+      "role": "member",
+      "createdAt": 1793800532881,
+      "isBanned": false,
+      "banReason": null,
+      "banExpiresAt": null,
+      "timedOutUntil": null,
+      "timeoutReason": null
+    },
+    {
+      "id": "user-cybernova",
+      "username": "CyberNova",
+      "tag": "7777",
+      "email": "nova@nexus.io",
+      "password": "password123",
+      "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=CyberNova",
+      "bio": "WebRTC, synthwave & open protocols 🎧",
+      "status": "online",
+      "customStatus": "Coding bots for Galaxy Cord",
+      "role": "member",
+      "createdAt": 1792072295163,
+      "isBanned": false,
+      "banReason": null,
+      "banExpiresAt": null,
+      "timedOutUntil": null,
+      "timeoutReason": null
+    },
+    {
+      "id": "sys-nexus",
+      "username": "Galaxy Bot",
+      "tag": "0001",
+      "email": "bot@nexus.io",
+      "password": "bot",
+      "avatar": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=100&h=100&fit=crop",
+      "bio": "Official Galaxy Cord automated assistant 🤖",
+      "status": "online",
+      "customStatus": "Powered by Neon Lakebase Postgres",
+      "role": "bot",
+      "createdAt": 1789480295163,
+      "isBanned": false,
+      "banReason": null,
+      "banExpiresAt": null,
+      "timedOutUntil": null,
+      "timeoutReason": null
     },
     {
       "id": "user-marcus",
@@ -36,80 +100,42 @@
       "bio": "Self-hosting enthusiast & Linux dev ⚡",
       "status": "idle",
       "customStatus": "Deploying nodes on Pterodactyl",
-      "createdAt": 1790759105448
+      "role": "moderator",
+      "createdAt": 1791208295163,
+      "isBanned": false,
+      "banReason": null,
+      "banExpiresAt": null,
+      "timedOutUntil": null,
+      "timeoutReason": null
     },
     {
-      "id": "user-cybernova",
-      "username": "CyberNova",
-      "tag": "7777",
-      "email": "nova@nexus.io",
-      "password": "password123",
-      "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=CyberNova",
-      "bio": "WebRTC, synthwave & open protocols 🎧",
+      "id": "acc-mw26lq4j",
+      "username": "neon_test_user_3192",
+      "tag": "1985",
+      "email": "neon_test_user_3192@example.com",
+      "password": "securePassword123!",
+      "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=neon_test_user_3192",
+      "bio": "Created through Galaxy Cord Web UI on Neon",
       "status": "online",
-      "customStatus": "Coding bots for NexusCord",
-      "createdAt": 1791623105448
+      "customStatus": null,
+      "role": "member",
+      "createdAt": 1793800668547,
+      "isBanned": false,
+      "banReason": null,
+      "banExpiresAt": null,
+      "timedOutUntil": null,
+      "timeoutReason": null
     },
     {
-      "id": "sys-nexus",
-      "username": "Nexus Bot",
-      "tag": "0001",
-      "email": "bot@nexus.io",
-      "password": "bot",
-      "avatar": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=100&h=100&fit=crop",
-      "bio": "Official NexusCord automated assistant 🤖",
+      "id": "acc-mw26m60u",
+      "username": "neon_web_user_5652",
+      "tag": "3817",
+      "email": "neon_web_user_5652@example.com",
+      "password": "securePassword123!",
+      "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=neon_web_user_5652",
+      "bio": "Created through Galaxy Cord Web UI on Neon",
       "status": "online",
-      "customStatus": "Always ready to help",
-      "createdAt": 1789031105448
-    },
-    {
-      "id": "acc-mvuqy4bj",
-      "username": "TestPilot",
-      "tag": "4832",
-      "email": "test@nexuscord.io",
-      "password": "password123",
-      "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=TestPilot",
-      "bio": "NexusCord user",
-      "status": "online",
-      "createdAt": 1793351109727
-    },
-    {
-      "id": "usr-m0ozir",
-      "username": "Higshdg",
-      "tag": "3317",
-      "email": "",
-      "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=usr-m0ozir",
-      "status": "online",
-      "customStatus": "Exploring NexusCord",
-      "createdAt": 1793445930260
-    },
-    {
-      "id": "usr-p4nxry",
-      "username": "QuantumSky",
-      "tag": "3330",
-      "email": "",
-      "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=usr-p4nxry",
-      "status": "online",
-      "customStatus": "Diddy is good",
-      "createdAt": 1793445952107
-    },
-    {
-      "id": "usr-tester-1",
-      "username": "Tester One",
-      "tag": "1919",
-      "email": "",
-      "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=usr-tester-1",
-      "status": "online",
-      "createdAt": 1793446867674
-    },
-    {
-      "id": "usr-tester-2",
-      "username": "Tester Two",
-      "tag": "4465",
-      "email": "",
-      "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=usr-tester-2",
-      "status": "online",
-      "createdAt": 1793446867676
+      "createdAt": 1793800689150
     }
   ],
   "friendships": [
@@ -119,7 +145,7 @@
       "userB": "user-marcus",
       "requesterId": "user-elena",
       "status": "friends",
-      "updatedAt": 1792919105448
+      "updatedAt": 1793368674671
     },
     {
       "id": "fr-elena-cyber",
@@ -127,63 +153,23 @@
       "userB": "user-cybernova",
       "requesterId": "user-cybernova",
       "status": "friends",
-      "updatedAt": 1793091905448
+      "updatedAt": 1793541474671
     },
     {
-      "id": "fr-1793351109727",
+      "id": "fr-1793800689150",
       "userA": "user-elena",
-      "userB": "acc-mvuqy4bj",
+      "userB": "acc-mw26m60u",
       "requesterId": "user-elena",
       "status": "friends",
-      "updatedAt": 1793351109727
+      "updatedAt": 1793800689150
     },
     {
-      "id": "fr-req-1793351109727",
+      "id": "fr-req-1793800689150",
       "userA": "user-cybernova",
-      "userB": "acc-mvuqy4bj",
+      "userB": "acc-mw26m60u",
       "requesterId": "user-cybernova",
-      "status": "friends",
-      "updatedAt": 1793351122109
-    },
-    {
-      "id": "fr-1793445930260",
-      "userA": "user-elena",
-      "userB": "usr-m0ozir",
-      "requesterId": "user-elena",
-      "status": "friends",
-      "updatedAt": 1793445930260
-    },
-    {
-      "id": "fr-1793445952107",
-      "userA": "user-elena",
-      "userB": "usr-p4nxry",
-      "requesterId": "user-elena",
-      "status": "friends",
-      "updatedAt": 1793445952107
-    },
-    {
-      "id": "fr-req-1793445952107",
-      "userA": "user-cybernova",
-      "userB": "usr-p4nxry",
-      "requesterId": "user-cybernova",
-      "status": "friends",
-      "updatedAt": 1793445953455
-    },
-    {
-      "id": "fr-1793446867674",
-      "userA": "user-elena",
-      "userB": "usr-tester-1",
-      "requesterId": "user-elena",
-      "status": "friends",
-      "updatedAt": 1793446867674
-    },
-    {
-      "id": "fr-1793446867676",
-      "userA": "user-elena",
-      "userB": "usr-tester-2",
-      "requesterId": "user-elena",
-      "status": "friends",
-      "updatedAt": 1793446867676
+      "status": "pending",
+      "updatedAt": 1793800689150
     }
   ],
   "directMessages": [
@@ -194,41 +180,8 @@
       "senderName": "Elena Rostova",
       "senderAvatar": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop",
       "recipientId": "user-marcus",
-      "text": "Hey Marcus! Testing direct messaging on NexusCord — works so fast!",
-      "timestamp": 1793307905448
-    },
-    {
-      "id": "dm-1793351117006-4flk",
-      "conversationId": "acc-mvuqy4bj_user-elena",
-      "senderId": "acc-mvuqy4bj",
-      "senderName": "TestPilot",
-      "senderAvatar": "https://api.dicebear.com/7.x/bottts/svg?seed=TestPilot",
-      "recipientId": "user-elena",
-      "text": "Hello Elena! Testing direct messaging.",
-      "attachments": [],
-      "timestamp": 1793351117006
-    },
-    {
-      "id": "dm-1793445964980-ddd2",
-      "conversationId": "user-cybernova_usr-p4nxry",
-      "senderId": "usr-p4nxry",
-      "senderName": "QuantumSky",
-      "senderAvatar": "https://api.dicebear.com/7.x/bottts/svg?seed=usr-p4nxry",
-      "recipientId": "user-cybernova",
-      "text": "Hi",
-      "attachments": [],
-      "timestamp": 1793445964980
-    },
-    {
-      "id": "dm-1793797293536-rrq2",
-      "conversationId": "user-cybernova_user-elena",
-      "senderId": "user-cybernova",
-      "senderName": "CyberNova",
-      "senderAvatar": "https://api.dicebear.com/7.x/bottts/svg?seed=CyberNova",
-      "recipientId": "user-elena",
-      "text": "Hi",
-      "attachments": [],
-      "timestamp": 1793797293536
+      "text": "Hey Marcus! Direct messaging on Galaxy Cord backed by Neon Postgres is super fast!",
+      "timestamp": 1793757474671
     }
   ],
   "channels": [
@@ -236,101 +189,93 @@
       "id": "c-general",
       "name": "general",
       "type": "text",
-      "topic": "General discussion for all NexusCord users",
-      "category": "TEXT CHANNELS"
+      "topic": "General discussion for all Galaxy Cord users",
+      "category": "TEXT CHANNELS",
+      "serverId": "nexus-global-community"
     },
     {
       "id": "c-announcements",
       "name": "announcements",
       "type": "text",
-      "topic": "NexusCord updates and self-hosting guides",
-      "category": "TEXT CHANNELS"
+      "topic": "Galaxy Cord updates and announcements",
+      "category": "TEXT CHANNELS",
+      "serverId": "nexus-global-community"
     },
     {
       "id": "c-gaming",
       "name": "gaming",
       "type": "text",
       "topic": "Games, clips, and screen share party",
-      "category": "TEXT CHANNELS"
+      "category": "TEXT CHANNELS",
+      "serverId": "nexus-global-community"
     },
     {
       "id": "c-dev-hub",
       "name": "dev-and-self-host",
       "type": "text",
       "topic": "Discuss custom server setups and scripting",
-      "category": "TEXT CHANNELS"
+      "category": "TEXT CHANNELS",
+      "serverId": "nexus-global-community"
     },
     {
       "id": "v-lounge",
       "name": "Lounge Talk",
       "type": "voice",
       "topic": "Casual voice chat",
-      "category": "VOICE & VIDEO"
+      "category": "VOICE & VIDEO",
+      "serverId": "nexus-global-community"
     },
     {
       "id": "v-screenshare",
       "name": "Screen Share & Streams",
       "type": "voice",
       "topic": "Share your screen, games, or work",
-      "category": "VOICE & VIDEO"
+      "category": "VOICE & VIDEO",
+      "serverId": "nexus-global-community"
     },
     {
       "id": "v-gaming",
       "name": "Gaming Squad",
       "type": "voice",
       "topic": "Low-latency gaming voice channel",
-      "category": "VOICE & VIDEO"
+      "category": "VOICE & VIDEO",
+      "serverId": "nexus-global-community"
     }
   ],
   "messages": [
     {
       "id": "m-welcome-1",
+      "serverId": "nexus-global-community",
       "channelId": "c-general",
       "senderId": "sys-nexus",
-      "senderName": "Nexus Bot",
+      "senderName": "Galaxy Bot",
       "senderAvatar": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=100&h=100&fit=crop",
-      "text": "👋 Welcome to **NexusCord**! You can chat with rich markdown, jump into voice channels to talk with low-latency WebRTC, and stream your screen.\n\nWant to host your own dedicated server? Click the **Host Server** button on the left sidebar to download the single-file server package!",
-      "timestamp": 1793431489127,
+      "text": "👋 Welcome to **Galaxy Cord**! Connected to **Neon Lakebase Postgres**.\n\nYou can chat with rich markdown, jump into voice channels to talk with low-latency WebRTC, and stream your screen in crystal-clear quality.",
+      "attachments": null,
+      "reactions": null,
+      "timestamp": 1793785895163,
       "system": true
     },
     {
       "id": "m-welcome-2",
+      "serverId": "nexus-global-community",
       "channelId": "c-general",
       "senderId": "user-elena",
       "senderName": "Elena Rostova",
       "senderAvatar": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop",
-      "text": "Hey everyone! Testing the screen sharing quality in #Screen Share & Streams — 60fps crystal clear! 🚀",
-      "timestamp": 1793444089127,
+      "text": "Hey everyone! Testing voice & screen sharing quality — crystal clear 60fps! 🚀",
+      "attachments": null,
       "reactions": {
+        "✨": [
+          "sys-nexus"
+        ],
         "🔥": [
           "sys-nexus",
           "user-marcus"
-        ],
-        "✨": [
-          "sys-nexus"
         ]
-      }
-    },
-    {
-      "id": "m-welcome-3",
-      "channelId": "c-announcements",
-      "senderId": "sys-nexus",
-      "senderName": "Nexus Core",
-      "senderAvatar": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=100&h=100&fit=crop",
-      "text": "📢 **Self-Hosting Guide Available!**\nYou can now run your own private NexusCord server in 10 seconds:\n```bash\nnode nexus-server.mjs\n```\nAll client signaling, voice WebRTC, screen share relay, and text channels are completely decentralized and independent.",
-      "timestamp": 1793359489127
-    },
-    {
-      "id": "m-test-1",
-      "serverId": "room-testing-123",
-      "channelId": "c-general",
-      "senderId": "usr-tester-1",
-      "senderName": "Tester One",
-      "senderAvatar": "https://api.dicebear.com/7.x/bottts/svg?seed=usr-tester-1",
-      "text": "Hello from Client 1!",
-      "attachments": [],
-      "reactions": {},
-      "timestamp": 1793446867879
+      },
+      "timestamp": 1793798495163,
+      "system": false
     }
   ]
 }

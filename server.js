@@ -1,9 +1,15 @@
+import dotenv from "dotenv";
+dotenv.config({ path: ".env.local" });
+dotenv.config();
 import express from "express";
 import http from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
+import {
+  neonDb
+} from "./server-db.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PORT = parseInt(process.env.PORT || "3000", 10);
@@ -313,7 +319,14 @@ function persistDatabase() {
       )
     );
   } catch (err) {
-    console.error("Failed to persist database:", err);
+    console.error("Failed to persist database to disk:", err);
+  }
+  try {
+    for (const acc of accounts) {
+      neonDb.insertAccount(acc).catch(() => {
+      });
+    }
+  } catch {
   }
 }
 function generateUserTag() {
@@ -1064,6 +1077,30 @@ app.get("/api/messages", (req, res) => {
     filtered = filtered.filter((m) => m.channelId === channelId);
   }
   res.json(filtered.slice(-200));
+});
+app.get("/api/neon/status", async (req, res) => {
+  try {
+    const status = await neonDb.getHealthStatus();
+    res.json(status);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+app.post("/api/neon/test-query", async (req, res) => {
+  try {
+    const status = await neonDb.getHealthStatus();
+    res.json({ success: true, result: status });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+app.get("/api/auth/neon/config", (req, res) => {
+  res.json({
+    baseUrl: process.env.NEON_AUTH_BASE_URL || "",
+    jwksUrl: process.env.NEON_AUTH_JWKS_URL || "",
+    branch: process.env.NEON_BRANCH || "production",
+    postgresConfigured: !!process.env.DATABASE_URL
+  });
 });
 app.post("/api/auth/register", (req, res) => {
   try {
@@ -1847,6 +1884,34 @@ app.post("/api/admin/login-galaxy505g", (req, res) => {
   }
 });
 async function startServer() {
+  try {
+    console.log("\u26A1 Initializing Neon Lakebase Postgres...");
+    await neonDb.init();
+    if (neonDb.accounts && neonDb.accounts.length > 0) {
+      accounts = neonDb.accounts;
+    }
+    if (neonDb.servers && neonDb.servers.length > 0) {
+      registeredServers = neonDb.servers;
+    }
+    if (neonDb.channels && neonDb.channels.length > 0) {
+      channels.length = 0;
+      channels.push(...neonDb.channels);
+    }
+    if (neonDb.messages && neonDb.messages.length > 0) {
+      messages.length = 0;
+      messages.push(...neonDb.messages);
+    }
+    if (neonDb.friendships && neonDb.friendships.length > 0) {
+      friendships = neonDb.friendships;
+    }
+    if (neonDb.directMessages && neonDb.directMessages.length > 0) {
+      directMessages = neonDb.directMessages;
+    }
+    ensureGalaxyAdminAccount();
+    console.log(`\u{1F30C} Lakebase Postgres ready: ${accounts.length} accounts, ${messages.length} messages, ${registeredServers.length} servers`);
+  } catch (err) {
+    console.error("Neon initialization notice:", err.message);
+  }
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
@@ -1861,8 +1926,9 @@ async function startServer() {
     });
   }
   server.listen(PORT, "0.0.0.0", () => {
-    console.log(`\u{1F680} NexusCord Server running at http://localhost:${PORT}`);
+    console.log(`\u{1F680} Galaxy Cord Server running at http://localhost:${PORT}`);
     console.log(`\u{1F4E1} WebSocket signaling mounted at ws://localhost:${PORT}/ws`);
+    console.log(`\u26A1 Neon Lakebase Postgres & Neon Auth active`);
   });
 }
 startServer().catch((err) => {

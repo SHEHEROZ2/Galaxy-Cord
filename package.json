@@ -14,6 +14,10 @@
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
+    "@neon/auth": "^0.8.2",
+    "@neon/config": "^1.10.1",
+    "@neon/env": "^1.6.9",
+    "@neondatabase/serverless": "^1.2.0",
     "@tailwindcss/vite": "^4.3.3",
     "@vitejs/plugin-react": "^6.1.1",
     "dotenv": "^17.2.3",

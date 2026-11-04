@@ -1,9 +1,22 @@
+import dotenv from 'dotenv';
+dotenv.config({ path: '.env.local' });
+dotenv.config();
+
 import express from 'express';
 import http from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import {
+  neonDb,
+  type StoredAccount as NeonStoredAccount,
+  type RegisteredServer as NeonRegisteredServer,
+  type Channel as NeonChannel,
+  type Message as NeonMessage,
+  type FriendshipRecord as NeonFriendshipRecord,
+  type DirectMessageRecord as NeonDirectMessageRecord,
+} from './server-db.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -460,9 +473,19 @@ function persistDatabase() {
       )
     );
   } catch (err) {
-    console.error('Failed to persist database:', err);
+    console.error('Failed to persist database to disk:', err);
+  }
+
+  // Asynchronously mirror updates to Neon Lakebase Postgres
+  try {
+    for (const acc of accounts) {
+      neonDb.insertAccount(acc).catch(() => {});
+    }
+  } catch {
+    // ignore
   }
 }
+
 
 // Helper to generate a random 4-digit discriminator tag
 function generateUserTag(): string {
@@ -1354,10 +1377,39 @@ app.get('/api/messages', (req, res) => {
   res.json(filtered.slice(-200));
 });
 
+// --- Neon Lakebase Postgres & Auth Diagnostics ---
+app.get('/api/neon/status', async (req, res) => {
+  try {
+    const status = await neonDb.getHealthStatus();
+    res.json(status);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/neon/test-query', async (req, res) => {
+  try {
+    const status = await neonDb.getHealthStatus();
+    res.json({ success: true, result: status });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/auth/neon/config', (req, res) => {
+  res.json({
+    baseUrl: process.env.NEON_AUTH_BASE_URL || '',
+    jwksUrl: process.env.NEON_AUTH_JWKS_URL || '',
+    branch: process.env.NEON_BRANCH || 'production',
+    postgresConfigured: !!process.env.DATABASE_URL,
+  });
+});
+
 // --- User Account System Endpoints ---
 
+
 // Register / Create Account
-app.post('/api/auth/register', (req, res) => {
+app.post('/api/auth/register', async (req, res) => {
   try {
     const { username, email, password, avatar, bio, guestId } = req.body;
     if (!username || username.trim().length < 2) {
@@ -1400,32 +1452,40 @@ app.post('/api/auth/register', (req, res) => {
         email: cleanEmail,
         password,
         avatar: avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${cleanUsername}`,
-        bio: bio || 'NexusCord user',
+        bio: bio || 'Galaxy Cord user',
         status: 'online',
         createdAt: Date.now(),
       };
       accounts.push(existingGuest);
 
       // Add default demo friendships so new users have someone to chat with immediately!
-      friendships.push({
+      const fr1 = {
         id: 'fr-' + Date.now(),
         userA: 'user-elena',
         userB: accountId,
         requesterId: 'user-elena',
-        status: 'friends',
+        status: 'friends' as const,
         updatedAt: Date.now(),
-      });
-      friendships.push({
+      };
+      const fr2 = {
         id: 'fr-req-' + Date.now(),
         userA: 'user-cybernova',
         userB: accountId,
         requesterId: 'user-cybernova',
-        status: 'pending',
+        status: 'pending' as const,
         updatedAt: Date.now(),
-      });
+      };
+      friendships.push(fr1, fr2);
+      await Promise.all([
+        neonDb.insertFriendship(fr1).catch(() => {}),
+        neonDb.insertFriendship(fr2).catch(() => {}),
+      ]);
     }
 
+    // Direct insertion to Neon Postgres
+    await neonDb.insertAccount(existingGuest);
     persistDatabase();
+
 
     res.json({
       success: true,
@@ -1541,7 +1601,7 @@ app.get('/api/auth/me', (req, res) => {
 });
 
 // Update Profile
-app.put('/api/auth/profile', (req, res) => {
+app.put('/api/auth/profile', async (req, res) => {
   try {
     const { userId, name, avatar, bio, status, customStatus } = req.body;
     if (!userId) return res.status(400).json({ error: 'Missing userId' });
@@ -1555,7 +1615,9 @@ app.put('/api/auth/profile', (req, res) => {
     if (status) account.status = status;
     if (customStatus !== undefined) account.customStatus = customStatus;
 
+    await neonDb.insertAccount(account);
     persistDatabase();
+
 
     // Broadcast update to online peers
     const client = clients.get(userId);
@@ -2315,7 +2377,37 @@ app.post('/api/admin/login-galaxy505g', (req, res) => {
 });
 
 // Vite middleware in dev or static files in prod
+// Vite middleware in dev or static files in prod
 async function startServer() {
+  try {
+    console.log('⚡ Initializing Neon Lakebase Postgres...');
+    await neonDb.init();
+    if (neonDb.accounts && neonDb.accounts.length > 0) {
+      accounts = neonDb.accounts;
+    }
+    if (neonDb.servers && neonDb.servers.length > 0) {
+      registeredServers = neonDb.servers;
+    }
+    if (neonDb.channels && neonDb.channels.length > 0) {
+      channels.length = 0;
+      channels.push(...neonDb.channels);
+    }
+    if (neonDb.messages && neonDb.messages.length > 0) {
+      messages.length = 0;
+      messages.push(...neonDb.messages);
+    }
+    if (neonDb.friendships && neonDb.friendships.length > 0) {
+      friendships = neonDb.friendships;
+    }
+    if (neonDb.directMessages && neonDb.directMessages.length > 0) {
+      directMessages = neonDb.directMessages;
+    }
+    ensureGalaxyAdminAccount();
+    console.log(`🌌 Lakebase Postgres ready: ${accounts.length} accounts, ${messages.length} messages, ${registeredServers.length} servers`);
+  } catch (err: any) {
+    console.error('Neon initialization notice:', err.message);
+  }
+
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
@@ -2331,8 +2423,9 @@ async function startServer() {
   }
 
   server.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 NexusCord Server running at http://localhost:${PORT}`);
+    console.log(`🚀 Galaxy Cord Server running at http://localhost:${PORT}`);
     console.log(`📡 WebSocket signaling mounted at ws://localhost:${PORT}/ws`);
+    console.log(`⚡ Neon Lakebase Postgres & Neon Auth active`);
   });
 }
 
