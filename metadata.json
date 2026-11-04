@@ -1,0 +1,7 @@
+{
+  "name": "NexusCord - Self-Hostable Voice, Screen Share & Chat",
+  "description": "Discord-inspired communication hub where communities can chat, talk with voice channels, share screens, and host their own private servers using downloadable server files.",
+  "requestFramePermissions": ["camera", "microphone", "display-capture"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
