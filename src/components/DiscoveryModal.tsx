@@ -43,7 +43,7 @@ export const DiscoveryModal: React.FC<DiscoveryModalProps> = ({
               <Zap className="w-6 h-6 fill-current" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-white">NexusCord Architecture & Hosting Guide</h2>
+              <h2 className="text-xl font-bold text-white">Galaxy Cord Architecture & Hosting Guide</h2>
               <p className="text-xs text-zinc-300">
                 A Discord-like decentralized platform where everyone can host their own servers.
               </p>
@@ -131,7 +131,7 @@ export const DiscoveryModal: React.FC<DiscoveryModalProps> = ({
                 <div>
                   <strong className="text-white">Connect & Chat:</strong>
                   <p className="text-xs text-zinc-400">
-                    Click <strong>"+ Add Server"</strong> in NexusCord and enter <code>ws://localhost:8080</code>. You are now the host of your own private realm!
+                    Click <strong>"+ Add Server"</strong> in Galaxy Cord and enter <code>ws://localhost:8080</code>. You are now the host of your own private realm!
                   </p>
                 </div>
               </div>

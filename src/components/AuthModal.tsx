@@ -51,7 +51,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [regUsername, setRegUsername] = useState(currentUser.name || '');
   const [regEmail, setRegEmail] = useState(currentUser.email || '');
   const [regPassword, setRegPassword] = useState('');
-  const [regBio, setRegBio] = useState(currentUser.bio || 'Exploring NexusCord');
+  const [regBio, setRegBio] = useState(currentUser.bio || 'Exploring Galaxy Cord');
   const [regAvatar, setRegAvatar] = useState(currentUser.avatar || AVATAR_PRESETS[0]);
 
   // Login form state
@@ -198,7 +198,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <KeyRound className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-white leading-tight">NexusCord Account</h2>
+              <h2 className="text-base font-bold text-white leading-tight">Galaxy Cord Account</h2>
               <p className="text-[11px] text-zinc-400">Save your identity and connect with friends</p>
             </div>
           </div>
@@ -342,7 +342,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   type="text"
                   value={regBio}
                   onChange={(e) => setRegBio(e.target.value)}
-                  placeholder="Hey there! I am using NexusCord."
+                  placeholder="Hey there! I am using Galaxy Cord."
                   className="w-full bg-[#1e1f22] border border-[#3f4147] rounded-lg px-3 py-2 text-white outline-none focus:border-indigo-500 text-sm"
                 />
               </div>

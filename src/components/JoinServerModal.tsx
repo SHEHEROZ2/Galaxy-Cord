@@ -234,7 +234,7 @@ export const JoinServerModal: React.FC<JoinServerModalProps> = ({
   const FEATURED_COMMUNITIES = [
     {
       id: 'featured-global',
-      name: 'NexusCord Global Hub',
+      name: 'Galaxy Cord Global Hub',
       badge: 'Official',
       desc: 'General chats, announcements, and active voice hangouts.',
       icon: <Radio className="w-5 h-5 text-indigo-400" />,

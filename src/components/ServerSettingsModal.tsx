@@ -58,7 +58,7 @@ export const ServerSettingsModal: React.FC<ServerSettingsModalProps> = ({
             <div className="flex items-center justify-between">
               <div>
                 <h4 className="text-lg font-bold text-white">{server.name}</h4>
-                <p className="text-xs text-zinc-400">{server.description || 'NexusCord Server'}</p>
+                <p className="text-xs text-zinc-400">{server.description || 'Galaxy Cord Server'}</p>
               </div>
               <span
                 className={`text-xs px-2.5 py-1 rounded-full font-bold border ${

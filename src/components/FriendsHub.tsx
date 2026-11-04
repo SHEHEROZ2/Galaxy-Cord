@@ -84,7 +84,7 @@ export const FriendsHub: React.FC<FriendsHubProps> = ({
     { name: 'Elena Rostova', tag: '1001', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop', bio: 'Community Manager & WebRTC Host' },
     { name: 'Marcus Vance', tag: '2048', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop', bio: 'Pterodactyl Node Administrator' },
     { name: 'CyberNova', tag: '7777', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=CyberNova', bio: 'Streamer & FPS Gamer' },
-    { name: 'Nexus Bot', tag: '0001', avatar: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=100&h=100&fit=crop', bio: 'Official NexusCord Automation Hub' },
+    { name: 'Galaxy Bot', tag: '0001', avatar: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=100&h=100&fit=crop', bio: 'Official Galaxy Cord Automation Hub' },
   ];
 
   return (
@@ -183,7 +183,7 @@ export const FriendsHub: React.FC<FriendsHubProps> = ({
             <div>
               <h2 className="text-base font-bold text-white uppercase tracking-wider">Add Friend</h2>
               <p className="text-xs text-zinc-400 mt-1">
-                You can add friends with their unique NexusCord Tag. You can also search by their username or email.
+                You can add friends with their unique Galaxy Cord Tag. You can also search by their username or email.
               </p>
             </div>
 

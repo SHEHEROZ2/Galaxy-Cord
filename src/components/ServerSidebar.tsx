@@ -88,7 +88,7 @@ export const ServerSidebar: React.FC<ServerSidebarProps> = ({
               ? 'rounded-[16px] bg-emerald-600 text-white shadow-emerald-500/25'
               : 'bg-[#313338] text-emerald-400 hover:bg-emerald-600 hover:text-white'
           }`}
-          title="NexusCord Global Community Hub"
+          title="Galaxy Cord Global Community Hub"
         >
           <Radio className="w-6 h-6 transition-transform group-hover:scale-110" />
           {latency > 0 && activeServerId === 'nexus-global-community' && (
@@ -100,7 +100,7 @@ export const ServerSidebar: React.FC<ServerSidebarProps> = ({
 
         {/* Tooltip */}
         <div className="absolute left-[80px] bg-[#111214] text-white text-xs font-semibold px-2.5 py-1.5 rounded-md shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
-          NexusCord Global Hub
+          Galaxy Cord Global Hub
         </div>
       </div>
 

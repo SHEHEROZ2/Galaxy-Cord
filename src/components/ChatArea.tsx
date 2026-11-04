@@ -266,7 +266,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   <div className="absolute right-0 top-9 bg-[#1e1f22] border border-[#35373c] rounded-xl p-1.5 shadow-2xl z-40 w-64 space-y-1 text-xs font-medium">
                     <div className="px-2.5 py-1 text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
                       <Radio className="w-3 h-3 text-emerald-400" />
-                      <span>NexusCord Community Server</span>
+                      <span>Galaxy Cord Community Server</span>
                     </div>
 
                     <button

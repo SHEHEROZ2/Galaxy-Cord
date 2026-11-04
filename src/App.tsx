@@ -1,5 +1,5 @@
 /**
- * NexusCord - Decentralized Voice, Screen Share & Chat Platform
+ * Galaxy Cord - Decentralized Voice, Screen Share & Chat Platform
  * Discord-inspired interface with self-hostable standalone server engine.
  */
 
@@ -47,7 +47,7 @@ function getInitialUser(): User {
     tag,
     avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${id}`,
     status: 'online',
-    customStatus: 'Exploring NexusCord',
+    customStatus: 'Exploring Galaxy Cord',
     role: 'member',
     isRegistered: false,
   };
@@ -62,16 +62,16 @@ function getDefaultServer(): Server {
 
   return {
     id: 'nexus-global-community',
-    name: 'NexusCord Global Hub',
+    name: 'Galaxy Cord Global Hub',
     description: 'Official community hub for chatting, voice hangouts, and screensharing.',
-    icon: '🌐',
+    icon: '🌌',
     url: defaultWsUrl,
     isDefault: true,
     isSelfHosted: false,
     createdAt: Date.now() - 86400000 * 30,
     channels: [
-      { id: 'c-general', name: 'general', type: 'text', topic: 'General discussion for all NexusCord users', category: 'TEXT CHANNELS' },
-      { id: 'c-announcements', name: 'announcements', type: 'text', topic: 'NexusCord updates and self-hosting guides', category: 'TEXT CHANNELS' },
+      { id: 'c-general', name: 'general', type: 'text', topic: 'General discussion for all Galaxy Cord users', category: 'TEXT CHANNELS' },
+      { id: 'c-announcements', name: 'announcements', type: 'text', topic: 'Galaxy Cord updates and self-hosting guides', category: 'TEXT CHANNELS' },
       { id: 'c-gaming', name: 'gaming', type: 'text', topic: 'Games, clips, and screen share party', category: 'TEXT CHANNELS' },
       { id: 'c-dev-hub', name: 'dev-and-self-host', type: 'text', topic: 'Discuss custom server setups and scripting', category: 'TEXT CHANNELS' },
       { id: 'v-lounge', name: 'Lounge Talk', type: 'voice', topic: 'Casual voice chat', category: 'VOICE & VIDEO' },
@@ -127,9 +127,9 @@ export default function App() {
       serverId: 'nexus-global-community',
       channelId: 'c-general',
       senderId: 'sys-nexus',
-      senderName: 'Nexus Bot',
+      senderName: 'Galaxy Bot',
       senderAvatar: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=100&h=100&fit=crop',
-      text: '👋 Welcome to **NexusCord**! You can chat with rich markdown, jump into voice channels to talk with low-latency WebRTC, and stream your screen.\n\nWant to host your own dedicated server? Click the **⚡ HOST** button on the left sidebar to download the single-file server package!',
+      text: '👋 Welcome to **Galaxy Cord**! You can chat with rich markdown, jump into voice channels to talk with low-latency WebRTC, and stream your screen.\n\nWant to host your own dedicated server? Click the **⚡ HOST** button on the left sidebar to download the single-file server package!',
       timestamp: Date.now() - 3600000 * 4,
       system: true,
     },
@@ -149,9 +149,9 @@ export default function App() {
       serverId: 'nexus-global-community',
       channelId: 'c-announcements',
       senderId: 'sys-nexus',
-      senderName: 'Nexus Core',
+      senderName: 'Galaxy Core',
       senderAvatar: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=100&h=100&fit=crop',
-      text: '📢 **Self-Hosting Guide Available!**\nYou can now run your own private NexusCord server in 10 seconds:\n```bash\nnode nexus-server.mjs\n```\nAll client signaling, voice WebRTC, screen share relay, and text channels are completely decentralized and independent.',
+      text: '📢 **Self-Hosting Guide Available!**\nYou can now run your own private Galaxy Cord server in 10 seconds:\n```bash\nnode server.js\n```\nAll client signaling, voice WebRTC, screen share relay, and text channels are completely decentralized and independent.',
       timestamp: Date.now() - 86400000,
     },
   ];

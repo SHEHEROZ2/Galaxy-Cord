@@ -249,7 +249,7 @@ export const HostServerModal: React.FC<HostServerModalProps> = ({
                 </span>
               </h2>
               <p className="text-xs text-zinc-400">
-                In NexusCord, anyone who wants to create a server hosts it. You have 100% data sovereignty!
+                In Galaxy Cord, anyone who wants to create a server hosts it. You have 100% data sovereignty!
               </p>
             </div>
           </div>
@@ -331,7 +331,7 @@ export const HostServerModal: React.FC<HostServerModalProps> = ({
                         </span>
                       </h3>
                       <p className="text-xs text-zinc-300">
-                        Host your private NexusCord voice, screen sharing, and chat server on any Pterodactyl Panel, PebbleHost, Bisect, Shockbyte, FalixNodes, or Wings container!
+                        Host your private Galaxy Cord voice, screen sharing, and chat server on any Pterodactyl Panel, PebbleHost, Bisect, Shockbyte, FalixNodes, or Wings container!
                       </p>
                     </div>
                   </div>
@@ -347,7 +347,7 @@ export const HostServerModal: React.FC<HostServerModalProps> = ({
                       type="text"
                       value={serverName}
                       onChange={(e) => setServerName(e.target.value)}
-                      placeholder="My NexusCord Server"
+                      placeholder="My Galaxy Cord Server"
                       className="w-full bg-[#111214] border border-[#3f4147] rounded-lg px-3 py-2 text-white text-xs outline-none focus:border-emerald-400"
                     />
                   </div>
@@ -480,7 +480,7 @@ export const HostServerModal: React.FC<HostServerModalProps> = ({
                       <span>Simple Connect!</span>
                     </div>
                     <p className="text-zinc-400 leading-relaxed">
-                      Copy your server IP & Port (e.g. <code>node1.host.net:8080</code>) and paste it into NexusCord's <strong>"+" (Join Server)</strong> box!
+                      Copy your server IP & Port (e.g. <code>node1.host.net:8080</code>) and paste it into Galaxy Cord's <strong>"+" (Join Server)</strong> box!
                     </p>
                   </div>
                 </div>
