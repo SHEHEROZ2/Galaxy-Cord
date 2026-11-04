@@ -4,6 +4,7 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
+import { AdminPanelModal } from './components/AdminPanelModal';
 import { AuthModal } from './components/AuthModal';
 import { ChannelSidebar } from './components/ChannelSidebar';
 import { ChatArea } from './components/ChatArea';
@@ -22,7 +23,7 @@ import { UserSettingsModal } from './components/UserSettingsModal';
 import { VoiceStage } from './components/VoiceStage';
 import { socketService } from './services/socketService';
 import { Channel, DirectMessage, FriendUser, Message, MessageAttachment, Server, User, VoicePeer } from './types';
-import { Compass, Hash, Radio, Tv, Users, Volume2 } from 'lucide-react';
+import { Compass, Hash, Radio, Shield, Tv, Users, Volume2 } from 'lucide-react';
 
 // Default guest identity generator
 function getInitialUser(): User {
@@ -238,6 +239,7 @@ export default function App() {
   const [isServerSettingsOpen, setIsServerSettingsOpen] = useState(false);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [isDiscoveryOpen, setIsDiscoveryOpen] = useState(false);
+  const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
 
   // Auto-detect invite link parameters (?join=... or ?server=...) to auto-connect easily
   useEffect(() => {
@@ -1183,6 +1185,8 @@ export default function App() {
                 setIsHostModalOpen(true);
               }}
               onOpenDiscovery={() => setIsDiscoveryOpen(true)}
+              onOpenAdminPanel={() => setIsAdminPanelOpen(true)}
+              isAdmin={currentUser.role === 'admin' || currentUser.name.toLowerCase() === 'galaxy505g'}
               latency={latency}
             />
 
@@ -1339,6 +1343,7 @@ export default function App() {
                 onNavigateToCommunity={handleNavigateToCommunity}
                 isCommunityServer={activeServerId === 'nexus-global-community'}
                 communityChannels={servers.find((s) => s.id === 'nexus-global-community')?.channels || []}
+                onOpenAdminPanel={() => setIsAdminPanelOpen(true)}
               />
             )}
           </div>
@@ -1522,6 +1527,22 @@ export default function App() {
           setIsHostModalOpen(true);
         }}
       />
+
+      {(currentUser.role === 'admin' || currentUser.name.toLowerCase() === 'galaxy505g') && (
+        <AdminPanelModal
+          isOpen={isAdminPanelOpen}
+          onClose={() => setIsAdminPanelOpen(false)}
+          currentUser={currentUser}
+          onUserSwitched={(newUser) => {
+            setCurrentUser(newUser);
+            socketService.send({
+              type: 'identify',
+              user: newUser,
+              serverId: activeServerId,
+            });
+          }}
+        />
+      )}
     </div>
   );
 }

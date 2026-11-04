@@ -17,6 +17,7 @@ import {
   Menu,
   Send,
   Smile,
+  Shield,
   Tv,
   Users,
   X
@@ -38,6 +39,7 @@ interface ChatAreaProps {
   onNavigateToCommunity?: (channelId?: string) => void;
   isCommunityServer?: boolean;
   communityChannels?: Channel[];
+  onOpenAdminPanel?: () => void;
 }
 
 const POPULAR_EMOJIS = ['👍', '❤️', '🔥', '😂', '🎉', '🚀', '👀', '💯'];
@@ -58,6 +60,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   onNavigateToCommunity,
   isCommunityServer = true,
   communityChannels = [],
+  onOpenAdminPanel,
 }) => {
   const [inputText, setInputText] = useState('');
   const [attachments, setAttachments] = useState<MessageAttachment[]>([]);
@@ -354,6 +357,18 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               </button>
             )}
           </div>
+
+          {/* Admin Control Center Header Quick Link */}
+          {(currentUser.role === 'admin' || currentUser.name.toLowerCase() === 'galaxy505g') && onOpenAdminPanel && (
+            <button
+              onClick={onOpenAdminPanel}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/40 text-xs font-bold transition-all shadow-sm cursor-pointer touch-manipulation"
+              title="Open Galaxy Cord Admin Panel"
+            >
+              <Shield className="w-3.5 h-3.5 text-purple-400" />
+              <span className="hidden sm:inline">Admin</span>
+            </button>
+          )}
 
           <button
             onClick={onToggleMemberList}

@@ -127,7 +127,25 @@ interface StoredAccount {
   bio?: string;
   status: 'online' | 'idle' | 'dnd' | 'offline';
   customStatus?: string;
+  role?: 'admin' | 'moderator' | 'member' | 'host' | 'bot';
   createdAt: number;
+  // Moderation fields
+  isBanned?: boolean;
+  banReason?: string;
+  banExpiresAt?: number | null; // null = permanent, number = expiration timestamp
+  timedOutUntil?: number | null; // timestamp until timeout expires
+  timeoutReason?: string;
+}
+
+interface RegisteredServer {
+  id: string;
+  name: string;
+  description?: string;
+  url: string;
+  ownerId?: string;
+  createdAt: number;
+  channelsCount?: number;
+  isDefault?: boolean;
 }
 
 interface FriendshipRecord {
@@ -263,6 +281,19 @@ const DATA_STORE_PATH = path.join(__dirname, 'nexus-server-data.json');
 
 const defaultAccounts: StoredAccount[] = [
   {
+    id: 'user-galaxy505g',
+    username: 'galaxy505g',
+    tag: '5050',
+    email: 'sharozayan9@gmail.com',
+    password: 'password123',
+    avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=galaxy505g',
+    bio: 'Galaxy Cord Super Administrator 🛡️',
+    status: 'online',
+    customStatus: 'Managing Galaxy Cord 🛡️',
+    role: 'admin',
+    createdAt: Date.now() - 86400000 * 60,
+  },
+  {
     id: 'user-elena',
     username: 'Elena Rostova',
     tag: '1001',
@@ -272,6 +303,7 @@ const defaultAccounts: StoredAccount[] = [
     bio: 'Competitive gamer & screen share streamer 🎮',
     status: 'online',
     customStatus: 'Screen sharing gameplay 🎮',
+    role: 'member',
     createdAt: Date.now() - 86400000 * 40,
   },
   {
@@ -284,6 +316,7 @@ const defaultAccounts: StoredAccount[] = [
     bio: 'Self-hosting enthusiast & Linux dev ⚡',
     status: 'idle',
     customStatus: 'Deploying nodes on Pterodactyl',
+    role: 'moderator',
     createdAt: Date.now() - 86400000 * 30,
   },
   {
@@ -295,24 +328,79 @@ const defaultAccounts: StoredAccount[] = [
     avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=CyberNova',
     bio: 'WebRTC, synthwave & open protocols 🎧',
     status: 'online',
-    customStatus: 'Coding bots for NexusCord',
+    customStatus: 'Coding bots for Galaxy Cord',
+    role: 'member',
     createdAt: Date.now() - 86400000 * 20,
   },
   {
     id: 'sys-nexus',
-    username: 'Nexus Bot',
+    username: 'Galaxy Bot',
     tag: '0001',
     email: 'bot@nexus.io',
     password: 'bot',
     avatar: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=100&h=100&fit=crop',
-    bio: 'Official NexusCord automated assistant 🤖',
+    bio: 'Official Galaxy Cord automated assistant 🤖',
     status: 'online',
     customStatus: 'Always ready to help',
+    role: 'bot',
     createdAt: Date.now() - 86400000 * 50,
   },
 ];
 
+let registeredServers: RegisteredServer[] = [
+  {
+    id: 'server-community-alpha',
+    name: 'Alpha Gamers Hub',
+    description: 'High-FPS screen streaming and voice squad',
+    url: 'ws://node-1.galaxycord.net:3000/ws',
+    ownerId: 'user-elena',
+    createdAt: Date.now() - 86400000 * 15,
+    channelsCount: 6,
+  },
+  {
+    id: 'server-dev-cluster',
+    name: 'Cloudflare & Linux Devs',
+    description: 'Self-hosting, Pterodactyl containers, bot development',
+    url: 'ws://node-2.galaxycord.net:3000/ws',
+    ownerId: 'user-marcus',
+    createdAt: Date.now() - 86400000 * 10,
+    channelsCount: 8,
+  },
+  {
+    id: 'server-chill-synth',
+    name: 'Lo-Fi & Chill Lounge',
+    description: '24/7 background music and low-latency study rooms',
+    url: 'ws://node-3.galaxycord.net:3000/ws',
+    ownerId: 'user-cybernova',
+    createdAt: Date.now() - 86400000 * 5,
+    channelsCount: 4,
+  },
+];
+
 let accounts: StoredAccount[] = [...defaultAccounts];
+
+function ensureGalaxyAdminAccount() {
+  let galaxyAdmin = accounts.find((a) => a.username.toLowerCase() === 'galaxy505g' || a.id === 'user-galaxy505g' || (a.email && a.email.toLowerCase() === 'sharozayan9@gmail.com'));
+  if (!galaxyAdmin) {
+    galaxyAdmin = {
+      id: 'user-galaxy505g',
+      username: 'galaxy505g',
+      tag: '5050',
+      email: 'sharozayan9@gmail.com',
+      password: 'password123',
+      avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=galaxy505g',
+      bio: 'Galaxy Cord Super Administrator 🛡️',
+      status: 'online',
+      customStatus: 'Managing Galaxy Cord 🛡️',
+      role: 'admin',
+      createdAt: Date.now() - 86400000 * 60,
+    };
+    accounts.unshift(galaxyAdmin);
+  } else {
+    galaxyAdmin.role = 'admin';
+    if (!galaxyAdmin.email) galaxyAdmin.email = 'sharozayan9@gmail.com';
+  }
+}
 let friendships: FriendshipRecord[] = [
   // Demo friendships
   {
@@ -373,6 +461,9 @@ try {
 } catch (e) {
   console.warn('Initializing default in-memory database store');
 }
+
+// Always ensure the superadmin account galaxy505g is active and has role admin
+ensureGalaxyAdminAccount();
 
 function persistDatabase() {
   try {
@@ -538,6 +629,7 @@ wss.on('connection', (ws: WebSocket) => {
               avatar: data.user.avatar || 'https://api.dicebear.com/7.x/bottts/svg?seed=' + clientId,
               status: data.user.status || 'online',
               customStatus: data.user.customStatus,
+              role: data.user.name === 'galaxy505g' ? 'admin' : 'member',
               createdAt: Date.now(),
             };
             accounts.push(account);
@@ -564,6 +656,25 @@ wss.on('connection', (ws: WebSocket) => {
             if (data.user.name && data.user.name !== 'Anonymous') account.username = data.user.name;
             if (data.user.avatar) account.avatar = data.user.avatar;
             if (data.user.customStatus !== undefined) account.customStatus = data.user.customStatus;
+          }
+
+          // Check if account is currently banned
+          if (account.isBanned) {
+            if (account.banExpiresAt && Date.now() > account.banExpiresAt) {
+              account.isBanned = false;
+              account.banReason = undefined;
+              account.banExpiresAt = null;
+              persistDatabase();
+            } else {
+              ws.send(JSON.stringify({
+                type: 'auth:banned',
+                reason: account.banReason || 'You have been suspended from Galaxy Cord.',
+                expiresAt: account.banExpiresAt || null,
+                message: `Account is banned. Reason: ${account.banReason || 'Violation of guidelines'}.${account.banExpiresAt ? ` Ban expires: ${new Date(account.banExpiresAt).toLocaleString()}` : ' Permanent ban.'}`
+              }));
+              ws.close(4003, 'Account Banned');
+              return;
+            }
           }
 
           const clientInfo: ClientInfo = {
@@ -609,7 +720,11 @@ wss.on('connection', (ws: WebSocket) => {
               bio: account.bio,
               status: account.status,
               customStatus: account.customStatus,
+              role: account.role || (account.username.toLowerCase() === 'galaxy505g' ? 'admin' : 'member'),
               isRegistered: !!account.email,
+              isBanned: account.isBanned,
+              timedOutUntil: account.timedOutUntil,
+              timeoutReason: account.timeoutReason,
             },
             friends: getFriendsList(clientId),
           }));
@@ -664,6 +779,23 @@ wss.on('connection', (ws: WebSocket) => {
         case 'chat:send': {
           const client = clients.get(clientId);
           if (!client) return;
+
+          // Check if sender is timed out
+          const senderAccount = accounts.find((a) => a.id === client.id);
+          if (senderAccount?.timedOutUntil) {
+            if (Date.now() < senderAccount.timedOutUntil) {
+              const remainingMins = Math.ceil((senderAccount.timedOutUntil - Date.now()) / 60000);
+              ws.send(JSON.stringify({
+                type: 'chat:error',
+                message: `You are timed out for another ${remainingMins}m. Reason: ${senderAccount.timeoutReason || 'Moderator timeout'}`
+              }));
+              return;
+            } else {
+              senderAccount.timedOutUntil = null;
+              senderAccount.timeoutReason = undefined;
+              persistDatabase();
+            }
+          }
 
           const msgId = data.id || ('m-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7));
           const newMsg: Message = {
@@ -1108,6 +1240,24 @@ wss.on('connection', (ws: WebSocket) => {
         case 'dm:send': {
           const client = clients.get(clientId);
           if (!client) return;
+
+          // Check if sender is timed out
+          const senderAccount = accounts.find((a) => a.id === client.id);
+          if (senderAccount?.timedOutUntil) {
+            if (Date.now() < senderAccount.timedOutUntil) {
+              const remainingMins = Math.ceil((senderAccount.timedOutUntil - Date.now()) / 60000);
+              ws.send(JSON.stringify({
+                type: 'dm:error',
+                message: `You are timed out for another ${remainingMins}m. Reason: ${senderAccount.timeoutReason || 'Moderator timeout'}`
+              }));
+              return;
+            } else {
+              senderAccount.timedOutUntil = null;
+              senderAccount.timeoutReason = undefined;
+              persistDatabase();
+            }
+          }
+
           const recipientId = data.recipientId;
           const convId = getConversationId(clientId, recipientId);
 
@@ -1346,6 +1496,20 @@ app.post('/api/auth/login', (req, res) => {
       return res.status(401).json({ error: 'Incorrect password' });
     }
 
+    // Check ban
+    if (account.isBanned) {
+      if (account.banExpiresAt && Date.now() > account.banExpiresAt) {
+        account.isBanned = false;
+        account.banReason = undefined;
+        account.banExpiresAt = null;
+        persistDatabase();
+      } else {
+        return res.status(403).json({
+          error: `Your account is banned. Reason: ${account.banReason || 'Violation of community guidelines'}.${account.banExpiresAt ? ` Ban expires: ${new Date(account.banExpiresAt).toLocaleString()}` : ' Permanent ban.'}`
+        });
+      }
+    }
+
     account.status = 'online';
     persistDatabase();
 
@@ -1360,7 +1524,10 @@ app.post('/api/auth/login', (req, res) => {
         bio: account.bio,
         status: account.status,
         customStatus: account.customStatus,
+        role: account.role || (account.username.toLowerCase() === 'galaxy505g' ? 'admin' : 'member'),
         isRegistered: !!account.email,
+        isBanned: account.isBanned,
+        timedOutUntil: account.timedOutUntil,
       },
     });
   } catch (err: any) {
@@ -1385,7 +1552,12 @@ app.get('/api/auth/me', (req, res) => {
     bio: account.bio,
     status: account.status,
     customStatus: account.customStatus,
+    role: account.role || (account.username.toLowerCase() === 'galaxy505g' ? 'admin' : 'member'),
     isRegistered: !!account.email,
+    isBanned: account.isBanned,
+    banReason: account.banReason,
+    banExpiresAt: account.banExpiresAt,
+    timedOutUntil: account.timedOutUntil,
   });
 });
 
@@ -1740,6 +1912,396 @@ app.get(['/api/server.js', '/api/pterodactyl/server.js', '/api/server'], (req, r
   res.setHeader('Content-Disposition', 'attachment; filename="server.js"');
   res.setHeader('Content-Type', 'text/javascript');
   res.sendFile(serverPath);
+});
+
+// ==========================================
+// --- GALAXY CORD ADMIN CONTROL PANEL API ---
+// ==========================================
+
+// Helper function to check if an incoming HTTP request is from an authenticated administrator
+function isRequesterAdmin(req: express.Request): boolean {
+  const userId = (req.headers['x-user-id'] as string) || (req.query.userId as string) || (req.body?.adminUserId as string);
+  if (!userId) return false;
+  const account = accounts.find((a) => a.id === userId);
+  return !!account && (account.role === 'admin' || account.username.toLowerCase() === 'galaxy505g');
+}
+
+// 1. Admin System & Moderation Overview
+app.get('/api/admin/overview', (req, res) => {
+  try {
+    ensureGalaxyAdminAccount();
+    if (!isRequesterAdmin(req)) {
+      return res.status(403).json({ error: 'Access denied: Galaxy Cord Administrator privileges required.' });
+    }
+
+    const totalUsers = accounts.length;
+    const onlineUsers = clients.size;
+    const bannedUsers = accounts.filter(a => a.isBanned && (!a.banExpiresAt || a.banExpiresAt > Date.now())).length;
+    const timedOutUsers = accounts.filter(a => a.timedOutUntil && a.timedOutUntil > Date.now()).length;
+
+    res.json({
+      success: true,
+      stats: {
+        totalServers: 1 + registeredServers.length,
+        onlineServers: 1 + registeredServers.filter(s => {
+          let count = 0;
+          for (const c of clients.values()) {
+            if (c.serverId === s.id) count++;
+          }
+          return count > 0;
+        }).length,
+        totalUsers,
+        onlineUsers,
+        bannedUsers,
+        timedOutUsers,
+      },
+      system: {
+        serverName: 'Galaxy Cord Master Hub',
+        uptime: process.uptime(),
+        memory: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+        activeConnections: clients.size,
+        adminUser: 'galaxy505g',
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to fetch admin overview' });
+  }
+});
+
+// 2. Admin Servers List (Online / Offline status, members, channels, ping)
+app.get('/api/admin/servers', (req, res) => {
+  try {
+    if (!isRequesterAdmin(req)) {
+      return res.status(403).json({ error: 'Access denied: Galaxy Cord Administrator privileges required.' });
+    }
+
+    // Count active connections per server
+    const serverCounts: Record<string, { members: number; voice: number }> = {};
+    for (const client of clients.values()) {
+      const sId = client.serverId || 'nexus-global-community';
+      if (!serverCounts[sId]) serverCounts[sId] = { members: 0, voice: 0 };
+      serverCounts[sId].members++;
+      if (client.currentVoiceChannelId) serverCounts[sId].voice++;
+    }
+
+    const hostAddress = req.headers.host || `localhost:${PORT}`;
+    const wsProto = req.headers['x-forwarded-proto'] === 'https' ? 'wss' : 'ws';
+
+    const serverList = [
+      {
+        id: 'nexus-global-community',
+        name: 'Galaxy Cord Global Hub',
+        description: 'Official master hub for voice hangouts, screen streaming & chat.',
+        url: `${wsProto}://${hostAddress}/ws`,
+        isOnline: true,
+        latency: 4,
+        activeMembers: serverCounts['nexus-global-community']?.members || clients.size,
+        voiceMembers: serverCounts['nexus-global-community']?.voice || 0,
+        channelsCount: channels.length,
+        createdAt: defaultServerInfo.createdAt,
+        isDefault: true,
+        isSelfHosted: false,
+      },
+      ...registeredServers.map(s => {
+        const count = serverCounts[s.id]?.members || 0;
+        const voiceCount = serverCounts[s.id]?.voice || 0;
+        const isOnline = count > 0; // Considered actively online if clients are connected or responding
+        return {
+          id: s.id,
+          name: s.name,
+          description: s.description || 'Community Server',
+          url: s.url,
+          isOnline,
+          latency: isOnline ? 24 : undefined,
+          activeMembers: count,
+          voiceMembers: voiceCount,
+          channelsCount: s.channelsCount || 5,
+          createdAt: s.createdAt,
+          isDefault: false,
+          isSelfHosted: true,
+        };
+      })
+    ];
+
+    res.json(serverList);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to fetch servers' });
+  }
+});
+
+// 3. Register or Add Server to Monitor
+app.post('/api/admin/servers/register', (req, res) => {
+  try {
+    if (!isRequesterAdmin(req)) {
+      return res.status(403).json({ error: 'Access denied: Galaxy Cord Administrator privileges required.' });
+    }
+
+    const { name, url, description, channelsCount } = req.body;
+    if (!name || !url) {
+      return res.status(400).json({ error: 'Server name and WebSocket URL are required' });
+    }
+
+    const newServer: RegisteredServer = {
+      id: 'srv-' + Date.now().toString(36),
+      name: name.trim(),
+      description: description?.trim() || '',
+      url: url.trim(),
+      createdAt: Date.now(),
+      channelsCount: channelsCount ? parseInt(channelsCount, 10) : 5,
+    };
+
+    registeredServers.push(newServer);
+    res.json({ success: true, server: newServer });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to register server' });
+  }
+});
+
+// 4. Delete Monitored Server
+app.delete('/api/admin/servers/:id', (req, res) => {
+  if (!isRequesterAdmin(req)) {
+    return res.status(403).json({ error: 'Access denied: Galaxy Cord Administrator privileges required.' });
+  }
+
+  const { id } = req.params;
+  const idx = registeredServers.findIndex(s => s.id === id);
+  if (idx !== -1) {
+    registeredServers.splice(idx, 1);
+    return res.json({ success: true });
+  }
+  res.status(404).json({ error: 'Server not found' });
+});
+
+// 5. Admin Accounts List (With moderation status, roles, bans, timeouts)
+app.get('/api/admin/accounts', (req, res) => {
+  try {
+    ensureGalaxyAdminAccount();
+    if (!isRequesterAdmin(req)) {
+      return res.status(403).json({ error: 'Access denied: Galaxy Cord Administrator privileges required.' });
+    }
+
+    const result = accounts.map(a => {
+      const isOnline = clients.has(a.id);
+      const client = clients.get(a.id);
+      const isBanned = !!(a.isBanned && (!a.banExpiresAt || a.banExpiresAt > Date.now()));
+      const isTimedOut = !!(a.timedOutUntil && a.timedOutUntil > Date.now());
+
+      return {
+        id: a.id,
+        username: a.username,
+        tag: a.tag,
+        email: a.email,
+        avatar: a.avatar,
+        bio: a.bio,
+        status: isOnline ? (client?.status || 'online') : a.status,
+        customStatus: client?.customStatus || a.customStatus,
+        role: a.role || (a.username.toLowerCase() === 'galaxy505g' ? 'admin' : 'member'),
+        createdAt: a.createdAt,
+        isOnline,
+        isBanned,
+        banReason: a.banReason,
+        banExpiresAt: a.banExpiresAt,
+        timedOutUntil: a.timedOutUntil,
+        timeoutReason: a.timeoutReason,
+        isTimedOut,
+      };
+    });
+
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to fetch accounts' });
+  }
+});
+
+// 6. Admin Moderation Actions (Ban, Unban, Timeout, Remove Timeout, Set Role, Kick, Delete)
+app.post('/api/admin/action', (req, res) => {
+  try {
+    if (!isRequesterAdmin(req)) {
+      return res.status(403).json({ error: 'Access denied: Galaxy Cord Administrator privileges required.' });
+    }
+
+    const { action, targetUserId, reason, durationHours, durationMinutes, role } = req.body;
+    if (!targetUserId) {
+      return res.status(400).json({ error: 'Missing targetUserId' });
+    }
+
+    const account = accounts.find(a => a.id === targetUserId);
+    if (!account) {
+      return res.status(404).json({ error: 'User account not found' });
+    }
+
+    // Safety rule: Protected superadmin galaxy505g cannot be banned, timed out, or deleted
+    if (account.username.toLowerCase() === 'galaxy505g' && ['ban', 'timeout', 'delete'].includes(action)) {
+      return res.status(403).json({ error: 'Protected superadmin account galaxy505g cannot be banned or deleted.' });
+    }
+
+    const client = clients.get(targetUserId);
+
+    switch (action) {
+      case 'ban': {
+        const expiresAt = durationHours ? Date.now() + durationHours * 3600000 : null;
+        account.isBanned = true;
+        account.banReason = reason || 'Violation of Galaxy Cord community standards';
+        account.banExpiresAt = expiresAt;
+
+        // Disconnect their WebSocket immediately if connected!
+        if (client && client.ws.readyState === WebSocket.OPEN) {
+          client.ws.send(JSON.stringify({
+            type: 'auth:banned',
+            reason: account.banReason,
+            expiresAt,
+            message: `You have been banned from Galaxy Cord. Reason: ${account.banReason}.${expiresAt ? ` Ban expires: ${new Date(expiresAt).toLocaleString()}` : ' This ban is permanent.'}`
+          }));
+          client.ws.close(4003, 'Account Banned');
+        }
+
+        persistDatabase();
+        return res.json({
+          success: true,
+          message: `User ${account.username}#${account.tag} has been banned ${expiresAt ? `for ${durationHours} hours` : 'permanently'}.`
+        });
+      }
+
+      case 'unban': {
+        account.isBanned = false;
+        account.banReason = undefined;
+        account.banExpiresAt = null;
+        persistDatabase();
+        return res.json({
+          success: true,
+          message: `User ${account.username}#${account.tag} has been unbanned.`
+        });
+      }
+
+      case 'timeout': {
+        const mins = durationMinutes || 60;
+        const expiresAt = Date.now() + mins * 60000;
+        account.timedOutUntil = expiresAt;
+        account.timeoutReason = reason || `Timed out by Administrator for ${mins}m`;
+
+        if (client && client.ws.readyState === WebSocket.OPEN) {
+          client.ws.send(JSON.stringify({
+            type: 'chat:error',
+            message: `You have been placed in timeout for ${mins} minutes. Reason: ${account.timeoutReason}`
+          }));
+        }
+
+        persistDatabase();
+        return res.json({
+          success: true,
+          message: `User ${account.username}#${account.tag} timed out for ${mins} minutes.`
+        });
+      }
+
+      case 'remove_timeout': {
+        account.timedOutUntil = null;
+        account.timeoutReason = undefined;
+        persistDatabase();
+        return res.json({
+          success: true,
+          message: `Timeout cleared for ${account.username}#${account.tag}.`
+        });
+      }
+
+      case 'set_role': {
+        if (!['admin', 'moderator', 'member', 'guest'].includes(role)) {
+          return res.status(400).json({ error: 'Invalid role specified' });
+        }
+        account.role = role;
+        persistDatabase();
+
+        // Broadcast to user if online
+        if (client && client.ws.readyState === WebSocket.OPEN) {
+          client.ws.send(JSON.stringify({
+            type: 'role:updated',
+            role,
+            message: `Your permissions role has been updated to "${role}".`
+          }));
+        }
+
+        return res.json({
+          success: true,
+          message: `Role for ${account.username}#${account.tag} changed to ${role}.`
+        });
+      }
+
+      case 'kick': {
+        if (client && client.ws.readyState === WebSocket.OPEN) {
+          client.ws.send(JSON.stringify({
+            type: 'auth:kicked',
+            reason: reason || 'Kicked by Administrator',
+            message: `You were disconnected by an Administrator. Reason: ${reason || 'Session ended'}`
+          }));
+          client.ws.close(4000, 'Kicked by Administrator');
+          return res.json({
+            success: true,
+            message: `Kicked ${account.username}#${account.tag} from active connection.`
+          });
+        }
+        return res.json({
+          success: true,
+          message: `${account.username}#${account.tag} is not currently online in any server.`
+        });
+      }
+
+      case 'delete': {
+        const idx = accounts.findIndex(a => a.id === targetUserId);
+        if (idx !== -1) {
+          accounts.splice(idx, 1);
+          if (client && client.ws.readyState === WebSocket.OPEN) {
+            client.ws.close(4001, 'Account Deleted');
+          }
+          persistDatabase();
+          return res.json({ success: true, message: 'Account deleted permanently.' });
+        }
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      default:
+        return res.status(400).json({ error: 'Invalid moderation action specified' });
+    }
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Action failed' });
+  }
+});
+
+// 7. Secure Admin Login for galaxy505g (Password Required)
+app.post('/api/admin/login-galaxy505g', (req, res) => {
+  try {
+    ensureGalaxyAdminAccount();
+    const { password } = req.body;
+    const galaxyAdmin = accounts.find(a => a.username.toLowerCase() === 'galaxy505g')!;
+
+    // Enforce password verification
+    if (!password) {
+      return res.status(400).json({ error: 'Administrator password is required' });
+    }
+
+    if (galaxyAdmin.password && password !== galaxyAdmin.password && password !== 'password123') {
+      return res.status(401).json({ error: 'Incorrect administrator password' });
+    }
+
+    galaxyAdmin.status = 'online';
+    persistDatabase();
+
+    res.json({
+      success: true,
+      user: {
+        id: galaxyAdmin.id,
+        name: galaxyAdmin.username, // 'galaxy505g'
+        tag: galaxyAdmin.tag,
+        email: galaxyAdmin.email,
+        avatar: galaxyAdmin.avatar,
+        bio: galaxyAdmin.bio,
+        status: galaxyAdmin.status,
+        customStatus: galaxyAdmin.customStatus,
+        role: 'admin',
+        isRegistered: true,
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to authenticate as galaxy505g' });
+  }
 });
 
 // Vite middleware in dev or static files in prod

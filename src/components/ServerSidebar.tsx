@@ -1,6 +1,6 @@
 import React from 'react';
 import { Server } from '../types';
-import { Compass, Globe, HardDrive, Plus, Radio, Server as ServerIcon, Zap } from 'lucide-react';
+import { Compass, Globe, HardDrive, Plus, Radio, Server as ServerIcon, Shield, Zap } from 'lucide-react';
 
 interface ServerSidebarProps {
   servers: Server[];
@@ -11,6 +11,8 @@ interface ServerSidebarProps {
   onOpenJoinModal: () => void;
   onOpenHostModal: (defaultTab?: 'pterodactyl' | 'download' | 'connect' | 'browser') => void;
   onOpenDiscovery: () => void;
+  onOpenAdminPanel?: () => void;
+  isAdmin?: boolean;
   latency: number;
 }
 
@@ -23,6 +25,8 @@ export const ServerSidebar: React.FC<ServerSidebarProps> = ({
   onOpenJoinModal,
   onOpenHostModal,
   onOpenDiscovery,
+  onOpenAdminPanel,
+  isAdmin = false,
   latency,
 }) => {
   const isDirectMessagesActive = activeServerId === '@me';
@@ -197,6 +201,25 @@ export const ServerSidebar: React.FC<ServerSidebarProps> = ({
             <span className="text-zinc-400 text-[11px]">(Pterodactyl / PC)</span>
           </div>
         </div>
+
+        {/* Admin Control Center Button - Only visible to authenticated admins (e.g. galaxy505g) */}
+        {isAdmin && (
+          <div className="relative group flex items-center justify-center w-full pt-1">
+            <div className="absolute left-0 w-1 bg-purple-500 rounded-r-full transition-all duration-200 h-6" />
+            <button
+              onClick={onOpenAdminPanel}
+              className="w-12 h-12 rounded-[24px] group-hover:rounded-[16px] transition-all duration-200 flex flex-col items-center justify-center shadow-lg relative cursor-pointer active:scale-95 touch-manipulation bg-gradient-to-tr from-purple-700 to-indigo-600 text-white border border-purple-400/50 shadow-purple-500/30"
+              title="Galaxy Cord Admin Control Panel (galaxy505g)"
+            >
+              <Shield className="w-5 h-5 transition-transform group-hover:scale-110" />
+              <span className="text-[8px] font-black tracking-wider leading-none mt-0.5">ADMIN</span>
+            </button>
+            <div className="absolute left-[80px] bg-[#111214] text-white text-xs font-semibold px-2.5 py-1.5 rounded-md shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 flex items-center gap-1.5 border border-purple-500/40">
+              <span className="text-purple-300 font-bold">🛡️ Admin Panel</span>
+              <span className="text-zinc-400 text-[10px]">(galaxy505g)</span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Discovery / Help */}

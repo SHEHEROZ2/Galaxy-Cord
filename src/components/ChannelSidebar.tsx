@@ -500,8 +500,13 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
             />
           </div>
           <div className="truncate">
-            <div className="text-xs font-bold text-white truncate leading-tight group-hover:text-indigo-300">
-              {currentUser.name}
+            <div className="text-xs font-bold text-white truncate leading-tight group-hover:text-indigo-300 flex items-center gap-1">
+              <span className="truncate">{currentUser.name}</span>
+              {(currentUser.role === 'admin' || currentUser.name.toLowerCase() === 'galaxy505g') && (
+                <span className="text-[9px] font-bold text-purple-300 bg-purple-950/80 px-1 rounded border border-purple-800/40 shrink-0">
+                  ADMIN
+                </span>
+              )}
             </div>
             <div className="text-[10px] text-zinc-400 truncate font-mono">
               #{currentUser.tag || '1234'}

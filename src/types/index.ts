@@ -7,7 +7,7 @@ export interface User {
   bio?: string;
   status: 'online' | 'idle' | 'dnd' | 'offline';
   customStatus?: string;
-  role?: 'host' | 'admin' | 'member' | 'bot';
+  role?: 'admin' | 'moderator' | 'member' | 'host' | 'bot';
   isRegistered?: boolean;
   currentVoiceChannelId?: string | null;
   isMuted?: boolean;
@@ -15,6 +15,12 @@ export interface User {
   isScreenSharing?: boolean;
   isCameraOn?: boolean;
   isSpeaking?: boolean;
+  // Moderation fields
+  isBanned?: boolean;
+  banReason?: string;
+  banExpiresAt?: number | null; // timestamp or null for permanent
+  timedOutUntil?: number | null; // timestamp
+  timeoutReason?: string;
 }
 
 export interface Account {
@@ -27,7 +33,38 @@ export interface Account {
   bio?: string;
   status: 'online' | 'idle' | 'dnd' | 'offline';
   customStatus?: string;
+  role?: 'admin' | 'moderator' | 'member' | 'host' | 'bot';
   createdAt: number;
+  // Moderation fields
+  isBanned?: boolean;
+  banReason?: string;
+  banExpiresAt?: number | null;
+  timedOutUntil?: number | null;
+  timeoutReason?: string;
+}
+
+export interface AdminServerInfo {
+  id: string;
+  name: string;
+  description?: string;
+  url: string;
+  isOnline: boolean;
+  latency?: number;
+  activeMembers: number;
+  voiceMembers: number;
+  channelsCount: number;
+  createdAt: number;
+  isDefault?: boolean;
+  isSelfHosted?: boolean;
+}
+
+export interface AdminStats {
+  totalServers: number;
+  onlineServers: number;
+  totalUsers: number;
+  onlineUsers: number;
+  bannedUsers: number;
+  timedOutUsers: number;
 }
 
 export type FriendshipStatus = 'friends' | 'pending_incoming' | 'pending_outgoing' | 'blocked';
