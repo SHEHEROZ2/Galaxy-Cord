@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { User } from '../types';
+import { verifyLocalLogin, saveLocalAccount, PRESET_ACCOUNTS, LocalStoredAccount } from '../utils/localAccounts';
 import {
   Check,
   Copy,
@@ -82,26 +83,70 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     setLoading(true);
     try {
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: regUsername.trim(),
-          email: regEmail.trim(),
-          password: regPassword,
-          avatar: regAvatar,
-          bio: regBio.trim(),
-          guestId: currentUser.id, // Upgrades current guest account smoothly
-        }),
-      });
+      let registeredUser: User | null = null;
+      let errorMsg: string | null = null;
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to create account');
+      try {
+        const res = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: regUsername.trim(),
+            email: regEmail.trim(),
+            password: regPassword,
+            avatar: regAvatar,
+            bio: regBio.trim(),
+            guestId: currentUser.id,
+          }),
+        });
+
+        const text = await res.text();
+        const data = text ? JSON.parse(text) : null;
+        if (res.ok && data?.user) {
+          registeredUser = data.user;
+        } else if (data?.error) {
+          errorMsg = data.error;
+        }
+      } catch {
+        // Backend not reachable (e.g. static Cloudflare deployment)
       }
 
-      setSuccessMsg(`Welcome, ${data.user.name}#${data.user.tag}! Account created successfully.`);
-      onAuthSuccess(data.user);
+      // If backend was unreachable or returned empty, create account in local store
+      if (!registeredUser && !errorMsg) {
+        const randomTag = Math.floor(1000 + Math.random() * 9000).toString();
+        const newLocalAcc: LocalStoredAccount = {
+          id: 'acc-' + Date.now().toString(36),
+          username: regUsername.trim(),
+          tag: randomTag,
+          email: regEmail.trim(),
+          password: regPassword,
+          avatar: regAvatar || 'https://api.dicebear.com/7.x/bottts/svg?seed=' + regUsername.trim(),
+          bio: regBio.trim(),
+          role: regUsername.trim().toLowerCase() === 'galaxy505g' ? 'admin' : 'member',
+          status: 'online',
+          createdAt: Date.now(),
+        };
+        saveLocalAccount(newLocalAcc);
+        registeredUser = {
+          id: newLocalAcc.id,
+          name: newLocalAcc.username,
+          tag: newLocalAcc.tag,
+          email: newLocalAcc.email,
+          avatar: newLocalAcc.avatar,
+          bio: newLocalAcc.bio,
+          status: 'online',
+          role: newLocalAcc.role,
+          isRegistered: true,
+        };
+      }
+
+      if (!registeredUser) {
+        throw new Error(errorMsg || 'Failed to create account');
+      }
+
+      setSuccessMsg(`Welcome, ${registeredUser.name}#${registeredUser.tag}! Account created successfully.`);
+      localStorage.setItem('nexus_user', JSON.stringify(registeredUser));
+      onAuthSuccess(registeredUser);
       setTimeout(() => {
         onClose();
       }, 1000);
@@ -124,25 +169,52 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     setLoading(true);
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          identifier: loginIdentifier.trim(),
-          password: loginPassword,
-        }),
-      });
+      let loggedInUser: User | null = null;
+      let errorMsg: string | null = null;
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Login failed');
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            identifier: loginIdentifier.trim(),
+            password: loginPassword,
+          }),
+        });
+
+        // Safe JSON parsing that never crashes on empty responses
+        const text = await res.text();
+        const data = text ? JSON.parse(text) : null;
+        if (res.ok && data?.user) {
+          loggedInUser = data.user;
+        } else if (data?.error) {
+          errorMsg = data.error;
+        }
+      } catch {
+        // Backend not reachable (e.g. static Cloudflare deployment)
       }
 
-      setSuccessMsg(`Logged in as ${data.user.name}#${data.user.tag}!`);
-      onAuthSuccess(data.user);
+      // If backend was unreachable or returned empty/non-JSON, fall back to local verification engine
+      if (!loggedInUser) {
+        const localAuth = verifyLocalLogin(loginIdentifier.trim(), loginPassword);
+        if (localAuth.success && localAuth.user) {
+          loggedInUser = localAuth.user;
+          errorMsg = null;
+        } else if (!errorMsg) {
+          errorMsg = localAuth.error || 'Invalid username or password';
+        }
+      }
+
+      if (!loggedInUser) {
+        throw new Error(errorMsg || 'Invalid username or password');
+      }
+
+      setSuccessMsg(`Logged in as ${loggedInUser.name}#${loggedInUser.tag || '0000'}!`);
+      localStorage.setItem('nexus_user', JSON.stringify(loggedInUser));
+      onAuthSuccess(loggedInUser);
       setTimeout(() => {
         onClose();
-      }, 1000);
+      }, 800);
     } catch (err: any) {
       setError(err.message || 'Invalid username or password');
     } finally {
@@ -155,27 +227,44 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setError(null);
     setLoading(true);
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          identifier,
-          password: 'password123',
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Demo login failed');
+      let loggedInUser: User | null = null;
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            identifier,
+            password: 'password123',
+          }),
+        });
+        const text = await res.text();
+        const data = text ? JSON.parse(text) : null;
+        if (res.ok && data?.user) {
+          loggedInUser = data.user;
+        }
+      } catch {
+        // Fallback
       }
 
-      setSuccessMsg(`Switched to ${data.user.name}#${data.user.tag}!`);
-      onAuthSuccess(data.user);
+      if (!loggedInUser) {
+        const localAuth = verifyLocalLogin(identifier, 'password123');
+        if (localAuth.success && localAuth.user) {
+          loggedInUser = localAuth.user;
+        }
+      }
+
+      if (!loggedInUser) {
+        throw new Error('Demo login failed');
+      }
+
+      setSuccessMsg(`Switched to ${loggedInUser.name}#${loggedInUser.tag || '0000'}!`);
+      localStorage.setItem('nexus_user', JSON.stringify(loggedInUser));
+      onAuthSuccess(loggedInUser);
       setTimeout(() => {
         onClose();
-      }, 800);
+      }, 600);
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'Demo login failed');
     } finally {
       setLoading(false);
     }

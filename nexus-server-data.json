@@ -1,6 +1,19 @@
 {
   "accounts": [
     {
+      "id": "user-galaxy505g",
+      "username": "galaxy505g",
+      "tag": "5050",
+      "email": "sharozayan9@gmail.com",
+      "password": "password123",
+      "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=galaxy505g",
+      "bio": "Galaxy Cord Super Administrator 🛡️",
+      "status": "online",
+      "customStatus": "Managing Galaxy Cord 🛡️",
+      "role": "admin",
+      "createdAt": 1788612752710
+    },
+    {
       "id": "user-elena",
       "username": "Elena Rostova",
       "tag": "1001",
@@ -10,7 +23,8 @@
       "bio": "Competitive gamer & screen share streamer 🎮",
       "status": "online",
       "customStatus": "Screen sharing gameplay 🎮",
-      "createdAt": 1789895105448
+      "createdAt": 1789895105448,
+      "role": "member"
     },
     {
       "id": "user-marcus",
@@ -140,14 +154,6 @@
       "updatedAt": 1793445930260
     },
     {
-      "id": "fr-req-1793445930260",
-      "userA": "user-cybernova",
-      "userB": "usr-m0ozir",
-      "requesterId": "user-cybernova",
-      "status": "pending",
-      "updatedAt": 1793445930260
-    },
-    {
       "id": "fr-1793445952107",
       "userA": "user-elena",
       "userB": "usr-p4nxry",
@@ -172,27 +178,11 @@
       "updatedAt": 1793446867674
     },
     {
-      "id": "fr-req-1793446867674",
-      "userA": "user-cybernova",
-      "userB": "usr-tester-1",
-      "requesterId": "user-cybernova",
-      "status": "pending",
-      "updatedAt": 1793446867674
-    },
-    {
       "id": "fr-1793446867676",
       "userA": "user-elena",
       "userB": "usr-tester-2",
       "requesterId": "user-elena",
       "status": "friends",
-      "updatedAt": 1793446867676
-    },
-    {
-      "id": "fr-req-1793446867676",
-      "userA": "user-cybernova",
-      "userB": "usr-tester-2",
-      "requesterId": "user-cybernova",
-      "status": "pending",
       "updatedAt": 1793446867676
     }
   ],
@@ -228,6 +218,17 @@
       "text": "Hi",
       "attachments": [],
       "timestamp": 1793445964980
+    },
+    {
+      "id": "dm-1793797293536-rrq2",
+      "conversationId": "user-cybernova_user-elena",
+      "senderId": "user-cybernova",
+      "senderName": "CyberNova",
+      "senderAvatar": "https://api.dicebear.com/7.x/bottts/svg?seed=CyberNova",
+      "recipientId": "user-elena",
+      "text": "Hi",
+      "attachments": [],
+      "timestamp": 1793797293536
     }
   ],
   "channels": [

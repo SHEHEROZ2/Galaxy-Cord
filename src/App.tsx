@@ -23,6 +23,7 @@ import { UserSettingsModal } from './components/UserSettingsModal';
 import { VoiceStage } from './components/VoiceStage';
 import { socketService } from './services/socketService';
 import { Channel, DirectMessage, FriendUser, Message, MessageAttachment, Server, User, VoicePeer } from './types';
+import { getInitialServers, ALL_ONLINE_SERVERS } from './utils/onlineServers';
 import { Compass, Hash, Radio, Shield, Tv, Users, Volume2 } from 'lucide-react';
 
 // Default guest identity generator
@@ -84,14 +85,15 @@ function getDefaultServer(): Server {
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User>(getInitialUser);
-  const [servers, setServers] = useState<Server[]>(() => {
-    const saved = localStorage.getItem('nexus_custom_servers');
-    const customList: Server[] = saved ? JSON.parse(saved) : [];
-    return [getDefaultServer(), ...customList];
-  });
+  const [servers, setServers] = useState<Server[]>(getInitialServers);
 
   const [activeServerId, setActiveServerId] = useState<string>(() => {
-    return localStorage.getItem('nexus_active_server_id') || 'nexus-global-community';
+    const saved = localStorage.getItem('nexus_active_server_id');
+    const removedIds = ['server-community-alpha', 'server-dev-cluster', 'server-chill-synth', 'server-anime-realm', 'server-esports-arena'];
+    if (!saved || removedIds.includes(saved)) {
+      return 'nexus-global-community';
+    }
+    return saved;
   });
   const activeServer = servers.find((s) => s.id === activeServerId) || servers[0];
 
@@ -1526,6 +1528,19 @@ export default function App() {
           setHostModalTab(tab);
           setIsHostModalOpen(true);
         }}
+        onSelectServer={(srv) => {
+          if (!servers.some((s) => s.id === srv.id)) {
+            setServers((prev) => [...prev, srv]);
+          }
+          setActiveServerId(srv.id);
+          setChannels(srv.channels);
+          setActiveChannelId(srv.channels[0]?.id || 'c-general');
+          setForceVoiceStage(false);
+          setActiveDmUserId(null);
+          setIsDiscoveryOpen(false);
+          setMobileView('chat');
+        }}
+        activeServerId={activeServerId}
       />
 
       {(currentUser.role === 'admin' || currentUser.name.toLowerCase() === 'galaxy505g') && (

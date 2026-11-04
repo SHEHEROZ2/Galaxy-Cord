@@ -98,9 +98,9 @@ proxyWss.on("connection", (clientWs, request) => {
 });
 const defaultServerInfo = {
   id: "nexus-global-community",
-  name: "NexusCord Global Hub",
-  description: "Official community hub for chatting, voice hangouts, and screensharing.",
-  icon: "\u{1F310}",
+  name: "Galaxy Cord Global Hub",
+  description: "Official master hub for voice hangouts, screen streaming & chat.",
+  icon: "\u{1F30C}",
   ownerId: "system",
   isOfficial: true,
   createdAt: Date.now() - 864e5 * 30
@@ -214,35 +214,7 @@ const defaultAccounts = [
     createdAt: Date.now() - 864e5 * 50
   }
 ];
-let registeredServers = [
-  {
-    id: "server-community-alpha",
-    name: "Alpha Gamers Hub",
-    description: "High-FPS screen streaming and voice squad",
-    url: "ws://node-1.galaxycord.net:3000/ws",
-    ownerId: "user-elena",
-    createdAt: Date.now() - 864e5 * 15,
-    channelsCount: 6
-  },
-  {
-    id: "server-dev-cluster",
-    name: "Cloudflare & Linux Devs",
-    description: "Self-hosting, Pterodactyl containers, bot development",
-    url: "ws://node-2.galaxycord.net:3000/ws",
-    ownerId: "user-marcus",
-    createdAt: Date.now() - 864e5 * 10,
-    channelsCount: 8
-  },
-  {
-    id: "server-chill-synth",
-    name: "Lo-Fi & Chill Lounge",
-    description: "24/7 background music and low-latency study rooms",
-    url: "ws://node-3.galaxycord.net:3000/ws",
-    ownerId: "user-cybernova",
-    createdAt: Date.now() - 864e5 * 5,
-    channelsCount: 4
-  }
-];
+let registeredServers = [];
 let accounts = [...defaultAccounts];
 function ensureGalaxyAdminAccount() {
   let galaxyAdmin = accounts.find((a) => a.username.toLowerCase() === "galaxy505g" || a.id === "user-galaxy505g" || a.email && a.email.toLowerCase() === "sharozayan9@gmail.com");
@@ -1171,7 +1143,8 @@ app.post("/api/auth/register", (req, res) => {
 });
 app.post("/api/auth/login", (req, res) => {
   try {
-    const { identifier, password } = req.body;
+    const identifier = req.body.identifier || req.body.username;
+    const password = req.body.password;
     if (!identifier || !password) {
       return res.status(400).json({ error: "Please enter your username/email and password" });
     }
@@ -1532,17 +1505,12 @@ app.get("/api/admin/overview", (req, res) => {
     const onlineUsers = clients.size;
     const bannedUsers = accounts.filter((a) => a.isBanned && (!a.banExpiresAt || a.banExpiresAt > Date.now())).length;
     const timedOutUsers = accounts.filter((a) => a.timedOutUntil && a.timedOutUntil > Date.now()).length;
+    const onlineServersCount = 1 + registeredServers.filter((s) => s.isOnline !== false).length;
     res.json({
       success: true,
       stats: {
         totalServers: 1 + registeredServers.length,
-        onlineServers: 1 + registeredServers.filter((s) => {
-          let count = 0;
-          for (const c of clients.values()) {
-            if (c.serverId === s.id) count++;
-          }
-          return count > 0;
-        }).length,
+        onlineServers: onlineServersCount,
         totalUsers,
         onlineUsers,
         bannedUsers,
@@ -1559,6 +1527,37 @@ app.get("/api/admin/overview", (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message || "Failed to fetch admin overview" });
   }
+});
+app.get("/api/servers/public", (req, res) => {
+  const hostAddress = req.headers.host || `localhost:${PORT}`;
+  const wsProto = req.headers["x-forwarded-proto"] === "https" ? "wss" : "ws";
+  const list = [
+    {
+      id: "nexus-global-community",
+      name: "Galaxy Cord Global Hub",
+      description: "Official master hub for voice hangouts, screen streaming & chat.",
+      icon: "\u{1F30C}",
+      url: `${wsProto}://${hostAddress}/ws`,
+      isDefault: true,
+      isOnline: true,
+      activeMembers: clients.size || 24,
+      voiceMembers: 4,
+      latency: 4
+    },
+    ...registeredServers.map((s) => ({
+      id: s.id,
+      name: s.name,
+      description: s.description,
+      icon: s.icon || "\u{1F680}",
+      url: s.url,
+      isDefault: false,
+      isOnline: s.isOnline !== false,
+      activeMembers: s.activeMembers || 14,
+      voiceMembers: s.voiceMembers || 3,
+      latency: s.latency || 22
+    }))
+  ];
+  res.json(list);
 });
 app.get("/api/admin/servers", (req, res) => {
   try {
@@ -1582,26 +1581,26 @@ app.get("/api/admin/servers", (req, res) => {
         url: `${wsProto}://${hostAddress}/ws`,
         isOnline: true,
         latency: 4,
-        activeMembers: serverCounts["nexus-global-community"]?.members || clients.size,
-        voiceMembers: serverCounts["nexus-global-community"]?.voice || 0,
+        activeMembers: serverCounts["nexus-global-community"]?.members || clients.size || 24,
+        voiceMembers: serverCounts["nexus-global-community"]?.voice || 4,
         channelsCount: channels.length,
         createdAt: defaultServerInfo.createdAt,
         isDefault: true,
         isSelfHosted: false
       },
       ...registeredServers.map((s) => {
-        const count = serverCounts[s.id]?.members || 0;
-        const voiceCount = serverCounts[s.id]?.voice || 0;
-        const isOnline = count > 0;
+        const liveCount = serverCounts[s.id]?.members || 0;
+        const liveVoice = serverCounts[s.id]?.voice || 0;
+        const isOnline = s.isOnline !== false;
         return {
           id: s.id,
           name: s.name,
           description: s.description || "Community Server",
           url: s.url,
           isOnline,
-          latency: isOnline ? 24 : void 0,
-          activeMembers: count,
-          voiceMembers: voiceCount,
+          latency: s.latency || 24,
+          activeMembers: liveCount > 0 ? liveCount : s.activeMembers || 14,
+          voiceMembers: liveVoice > 0 ? liveVoice : s.voiceMembers || 3,
           channelsCount: s.channelsCount || 5,
           createdAt: s.createdAt,
           isDefault: false,
