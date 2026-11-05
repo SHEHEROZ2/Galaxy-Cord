@@ -304,6 +304,84 @@ export default function App() {
     }
   }, [currentUser.id]);
 
+  // Fetch all registered community members from Neon database
+  useEffect(() => {
+    fetch('/api/members')
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setMembers((prev) => {
+            const map = new Map<string, User>();
+            map.set(currentUser.id, currentUser);
+            prev.forEach((m) => map.set(m.id, m));
+            data.forEach((m: User) => {
+              if (m.id === currentUser.id) return;
+              if (map.has(m.id)) {
+                map.set(m.id, { ...map.get(m.id)!, ...m });
+              } else {
+                map.set(m.id, m);
+              }
+            });
+            return Array.from(map.values());
+          });
+        }
+      })
+      .catch((err) => console.warn('Could not load members from Neon:', err));
+  }, [currentUser.id]);
+
+  // Fetch all online & registered servers from Neon database
+  useEffect(() => {
+    fetch('/api/servers/public')
+      .then((res) => res.json())
+      .then((data) => {
+        const serverList = Array.isArray(data) ? data : data?.servers;
+        if (Array.isArray(serverList) && serverList.length > 0) {
+          setServers((prev) => {
+            const map = new Map<string, Server>();
+            // Keep default server first
+            const defaultHub = prev.find((s) => s.id === 'nexus-global-community') || serverList.find((s: Server) => s.id === 'nexus-global-community');
+            if (defaultHub) map.set(defaultHub.id, defaultHub);
+
+            // Add local servers
+            prev.forEach((s) => {
+              if (s.id && !map.has(s.id)) map.set(s.id, s);
+            });
+
+            // Merge servers from Neon
+            serverList.forEach((s: any) => {
+              if (!s.id) return;
+              if (s.id === 'nexus-global-community') {
+                const existing = map.get(s.id);
+                if (existing) {
+                  map.set(s.id, { ...existing, ...s, channels: existing.channels || s.channels });
+                }
+              } else if (!map.has(s.id)) {
+                map.set(s.id, {
+                  id: s.id,
+                  name: s.name,
+                  description: s.description || 'Community Server',
+                  icon: s.icon || '🚀',
+                  url: s.url || defaultHub?.url || '',
+                  isSelfHosted: s.isSelfHosted ?? true,
+                  password: s.password,
+                  createdAt: Number(s.createdAt || Date.now()),
+                  channels: s.channels && s.channels.length > 0 ? s.channels : [
+                    { id: 'c-general', name: 'general', type: 'text', category: 'TEXT CHANNELS' },
+                    { id: 'c-gaming', name: 'gaming', type: 'text', category: 'TEXT CHANNELS' },
+                    { id: 'v-lounge', name: 'General Voice', type: 'voice', category: 'VOICE & VIDEO' },
+                  ],
+                });
+              }
+            });
+
+            return Array.from(map.values());
+          });
+        }
+      })
+      .catch((err) => console.warn('Could not load servers from Neon:', err));
+  }, []);
+
+
   // Connect WebSocket to active server or default community hub
   useEffect(() => {
     const targetUrl =
@@ -849,6 +927,13 @@ export default function App() {
 
     const customOnly = updated.filter((s) => s.id !== 'nexus-global-community');
     localStorage.setItem('nexus_custom_servers', JSON.stringify(customOnly));
+
+    // Persist server to Neon Lakebase Postgres
+    fetch('/api/servers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newServer),
+    }).catch(() => {});
   };
 
   const handleRemoveServer = (serverId: string) => {
@@ -857,6 +942,11 @@ export default function App() {
     setActiveServerId('nexus-global-community');
     const customOnly = updated.filter((s) => s.id !== 'nexus-global-community');
     localStorage.setItem('nexus_custom_servers', JSON.stringify(customOnly));
+
+    // Delete server from Neon Lakebase Postgres
+    fetch(`/api/servers/${encodeURIComponent(serverId)}`, {
+      method: 'DELETE',
+    }).catch(() => {});
   };
 
   const handleUpdateUser = (updates: Partial<User>) => {
@@ -885,6 +975,13 @@ export default function App() {
       return [...prev, newMsg];
     });
     socketService.sendMessage(activeChannelId, text, attachments, msgId);
+
+    // REST fallback persistence to Neon Lakebase Postgres
+    fetch('/api/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newMsg),
+    }).catch(() => {});
   };
 
   const handleSendTyping = (isTyping: boolean) => {
@@ -1541,6 +1638,7 @@ export default function App() {
           setMobileView('chat');
         }}
         activeServerId={activeServerId}
+        servers={servers}
       />
 
       {(currentUser.role === 'admin' || currentUser.name.toLowerCase() === 'galaxy505g') && (

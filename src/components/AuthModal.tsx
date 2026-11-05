@@ -65,7 +65,39 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [copiedTag, setCopiedTag] = useState(false);
 
+  // Available community accounts from Neon Postgres
+  const [availableAccounts, setAvailableAccounts] = useState<
+    Array<{ id: string; name: string; tag: string; role: string; avatar?: string }>
+  >([
+    { id: 'user-elena', name: 'Elena Rostova', tag: '1001', role: 'Online / Voice host' },
+    { id: 'user-marcus', name: 'Marcus Vance', tag: '2048', role: 'VPS Server Host' },
+    { id: 'user-cybernova', name: 'CyberNova', tag: '7777', role: 'Gamer / Streamer' },
+  ]);
+
+  React.useEffect(() => {
+    fetch('/api/members')
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          const list = data
+            .filter((a: any) => a.name.toLowerCase() !== 'galaxy505g' && a.id !== 'user-galaxy505g')
+            .map((a: any) => ({
+              id: a.id,
+              name: a.name,
+              tag: a.tag,
+              role: a.role === 'moderator' ? 'Server Moderator' : (a.role === 'admin' ? 'Admin' : 'Community Member'),
+              avatar: a.avatar,
+            }));
+          if (list.length > 0) {
+            setAvailableAccounts(list);
+          }
+        }
+      })
+      .catch(() => {});
+  }, [isOpen]);
+
   if (!isOpen) return null;
+
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -528,12 +560,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <Zap className="w-3.5 h-3.5 text-amber-400" />
                   <span>Quick Demo Account Logins (1-Click)</span>
                 </div>
-                <div className="grid grid-cols-1 gap-1.5">
-                  {[
-                    { id: 'user-elena', name: 'Elena Rostova', tag: '1001', role: 'Online / Voice host' },
-                    { id: 'user-marcus', name: 'Marcus Vance', tag: '2048', role: 'VPS Server Host' },
-                    { id: 'user-cybernova', name: 'CyberNova', tag: '7777', role: 'Gamer / Streamer' },
-                  ].map((acc) => (
+                <div className="grid grid-cols-1 gap-1.5 max-h-52 overflow-y-auto pr-0.5">
+                  {availableAccounts.map((acc) => (
                     <button
                       key={acc.id}
                       type="button"
@@ -541,19 +569,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       disabled={loading}
                       className="w-full flex items-center justify-between p-2 rounded-lg bg-[#2b2d31] hover:bg-[#35373c] border border-[#383a40] text-left transition-colors cursor-pointer group"
                     >
-                      <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full bg-indigo-600/30 text-indigo-300 font-bold flex items-center justify-center text-xs">
-                          {acc.name[0]}
-                        </div>
-                        <div>
-                          <div className="font-bold text-white text-xs group-hover:text-indigo-300">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {acc.avatar ? (
+                          <img src={acc.avatar} alt={acc.name} className="w-7 h-7 rounded-full object-cover shrink-0" />
+                        ) : (
+                          <div className="w-7 h-7 rounded-full bg-indigo-600/30 text-indigo-300 font-bold flex items-center justify-center text-xs shrink-0">
+                            {acc.name[0]}
+                          </div>
+                        )}
+                        <div className="min-w-0 truncate">
+                          <div className="font-bold text-white text-xs group-hover:text-indigo-300 truncate">
                             {acc.name}
                             <span className="text-zinc-500 text-[10px] ml-1">#{acc.tag}</span>
                           </div>
-                          <div className="text-[10px] text-zinc-400">{acc.role}</div>
+                          <div className="text-[10px] text-zinc-400 truncate">{acc.role}</div>
                         </div>
                       </div>
-                      <span className="text-[10px] font-bold text-indigo-400 group-hover:text-indigo-300 bg-indigo-950/60 px-2 py-0.5 rounded border border-indigo-700/40">
+                      <span className="text-[10px] font-bold text-indigo-400 group-hover:text-indigo-300 bg-indigo-950/60 px-2 py-0.5 rounded border border-indigo-700/40 shrink-0">
                         Switch
                       </span>
                     </button>
@@ -561,6 +593,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </div>
               </div>
             </div>
+
           )}
 
           {/* PROFILE / LOGGED IN TAB */}

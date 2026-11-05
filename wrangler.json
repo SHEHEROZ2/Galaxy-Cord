@@ -3,8 +3,14 @@
   "name": "galaxy-cord",
   "main": "worker.ts",
   "compatibility_date": "2024-09-23",
+  "compatibility_flags": ["nodejs_compat"],
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS"
+  },
+  "vars": {
+    "DATABASE_URL": "postgresql://neondb_owner:npg_ciObVhId1a7Y@ep-little-scene-ao1qq1x4-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?channel_binding=require&sslmode=require",
+    "DATABASE_URL_UNPOOLED": "postgresql://neondb_owner:npg_ciObVhId1a7Y@ep-little-scene-ao1qq1x4.c-2.ap-southeast-1.aws.neon.tech/neondb?channel_binding=require&sslmode=require",
+    "NEON_AUTH_BASE_URL": "https://ep-little-scene-ao1qq1x4.neonauth.c-2.ap-southeast-1.aws.neon.tech/neondb/auth"
   }
 }

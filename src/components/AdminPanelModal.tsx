@@ -127,13 +127,23 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         try {
           const sList = await serversRes.json();
           if (Array.isArray(sList) && sList.length > 0) {
-            loadedServers = sList;
+            const seen = new Set<string>();
+            loadedServers = sList.filter((s: AdminServerInfo) => {
+              if (!s.id || seen.has(s.id)) return false;
+              seen.add(s.id);
+              return true;
+            });
           }
         } catch {}
       }
       if (loadedServers.length === 0) {
         // Fallback to all online community servers with live active stats
-        loadedServers = ALL_ONLINE_SERVERS.map((s, idx) => ({
+        const seen = new Set<string>();
+        loadedServers = ALL_ONLINE_SERVERS.filter((s) => {
+          if (!s.id || seen.has(s.id)) return false;
+          seen.add(s.id);
+          return true;
+        }).map((s) => ({
           id: s.id,
           name: s.name,
           description: s.description,
@@ -149,6 +159,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         }));
       }
       setServers(loadedServers);
+
 
       let loadedAccounts: AccountItem[] = [];
       if (accountsRes && accountsRes.ok) {

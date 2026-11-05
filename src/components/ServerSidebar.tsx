@@ -114,7 +114,7 @@ export const ServerSidebar: React.FC<ServerSidebarProps> = ({
       {/* Server List */}
       <div className="flex-1 w-full overflow-y-auto overflow-x-hidden space-y-2 no-scrollbar flex flex-col items-center touch-pan-y overscroll-contain">
         {servers
-          .filter((s) => s.id !== 'nexus-global-community')
+          .filter((s, idx, arr) => s.id !== 'nexus-global-community' && arr.findIndex((item) => item.id === s.id) === idx)
           .map((server) => {
             const isActive = server.id === activeServerId;
             const initials = server.name

@@ -25,6 +25,7 @@ interface DiscoveryModalProps {
   onOpenHostModal: (tab?: 'pterodactyl' | 'download' | 'connect' | 'browser') => void;
   onSelectServer?: (server: Server) => void;
   activeServerId?: string;
+  servers?: Server[];
 }
 
 export const DiscoveryModal: React.FC<DiscoveryModalProps> = ({
@@ -33,6 +34,7 @@ export const DiscoveryModal: React.FC<DiscoveryModalProps> = ({
   onOpenHostModal,
   onSelectServer,
   activeServerId,
+  servers,
 }) => {
   const [activeTab, setActiveTab] = useState<'servers' | 'guide'>('servers');
   const [searchQuery, setSearchQuery] = useState('');
@@ -40,9 +42,13 @@ export const DiscoveryModal: React.FC<DiscoveryModalProps> = ({
 
   if (!isOpen) return null;
 
-  const onlineServersList = ALL_ONLINE_SERVERS;
+  const onlineServersList = servers && servers.length > 0 ? servers : ALL_ONLINE_SERVERS;
 
+  const seenIds = new Set<string>();
   const filteredServers = onlineServersList.filter((srv) => {
+    if (!srv.id || seenIds.has(srv.id)) return false;
+    seenIds.add(srv.id);
+
     const q = searchQuery.toLowerCase();
     const matchesSearch =
       srv.name.toLowerCase().includes(q) ||
@@ -55,6 +61,7 @@ export const DiscoveryModal: React.FC<DiscoveryModalProps> = ({
 
     return true;
   });
+
 
   return (
     <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 select-none animate-in fade-in duration-200">

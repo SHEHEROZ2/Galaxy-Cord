@@ -21,7 +21,7 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const PORT = parseInt(process.env.PORT || '3000', 10);
+const PORT = 3000;
 const app = express();
 const server = http.createServer(app);
 
@@ -1687,7 +1687,30 @@ app.get('/api/messages', (req, res) => {
   res.json(filtered.slice(-150));
 });
 
+// All Community Members from Neon Lakebase Postgres
+app.get('/api/members', (req, res) => {
+  try {
+    const list = accounts.map((a) => {
+      const isOnline = clients.has(a.id);
+      return {
+        id: a.id,
+        name: a.username,
+        tag: a.tag,
+        avatar: a.avatar,
+        status: isOnline ? 'online' : (a.status || 'offline'),
+        customStatus: a.customStatus,
+        role: a.role || (a.username.toLowerCase() === 'galaxy505g' ? 'admin' : 'member'),
+        bio: a.bio,
+      };
+    });
+    res.json(list);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Search Users for Adding Friends
+
 app.get('/api/users/search', (req, res) => {
   const query = (req.query.q as string || '').trim().toLowerCase();
   const currentUserId = req.query.currentUserId as string;
@@ -2023,7 +2046,9 @@ app.get('/api/servers/public', (req, res) => {
       voiceMembers: 4,
       latency: 4,
     },
-    ...registeredServers.map((s) => ({
+    ...registeredServers
+      .filter((s) => s.id !== 'nexus-global-community')
+      .map((s) => ({
       id: s.id,
       name: s.name,
       description: s.description,
@@ -2074,7 +2099,9 @@ app.get('/api/admin/servers', (req, res) => {
         isDefault: true,
         isSelfHosted: false,
       },
-      ...registeredServers.map(s => {
+      ...registeredServers
+        .filter((s) => s.id !== 'nexus-global-community')
+        .map(s => {
         const liveCount = serverCounts[s.id]?.members || 0;
         const liveVoice = serverCounts[s.id]?.voice || 0;
         const isOnline = s.isOnline !== false;
@@ -2101,47 +2128,77 @@ app.get('/api/admin/servers', (req, res) => {
   }
 });
 
-// 3. Register or Add Server to Monitor
-app.post('/api/admin/servers/register', (req, res) => {
+// 3. Register or Add Server (both Admin and General)
+app.post(['/api/admin/servers/register', '/api/servers'], async (req, res) => {
   try {
-    if (!isRequesterAdmin(req)) {
-      return res.status(403).json({ error: 'Access denied: Galaxy Cord Administrator privileges required.' });
+    const { name, url, description, channelsCount, icon, id } = req.body;
+    if (!name) {
+      return res.status(400).json({ error: 'Server name is required' });
     }
 
-    const { name, url, description, channelsCount } = req.body;
-    if (!name || !url) {
-      return res.status(400).json({ error: 'Server name and WebSocket URL are required' });
-    }
+    const hostAddress = req.headers.host || `localhost:${PORT}`;
+    const wsProto = req.headers['x-forwarded-proto'] === 'https' ? 'wss' : 'ws';
+    const effectiveUrl = (url || `${wsProto}://${hostAddress}/ws`).trim();
 
+    const srvId = id || 'srv-' + Date.now().toString(36);
     const newServer: RegisteredServer = {
-      id: 'srv-' + Date.now().toString(36),
+      id: srvId,
       name: name.trim(),
-      description: description?.trim() || '',
-      url: url.trim(),
+      description: description?.trim() || 'Community Server',
+      url: effectiveUrl,
+      icon: icon || '⚡',
       createdAt: Date.now(),
       channelsCount: channelsCount ? parseInt(channelsCount, 10) : 5,
     };
 
-    registeredServers.push(newServer);
+    const existingIdx = registeredServers.findIndex((s) => s.id === srvId);
+    if (existingIdx !== -1) {
+      registeredServers[existingIdx] = newServer;
+    } else {
+      registeredServers.push(newServer);
+    }
+
+    // Persist into Neon Lakebase Postgres
+    await neonDb.insertServer({
+      id: srvId,
+      name: newServer.name,
+      description: newServer.description,
+      url: newServer.url,
+      icon: newServer.icon,
+      ownerId: 'user',
+      createdAt: newServer.createdAt,
+      channelsCount: newServer.channelsCount,
+      isDefault: false,
+      activeMembers: 1,
+      voiceMembers: 0,
+      isOnline: true,
+      latency: 20,
+    });
+
     res.json({ success: true, server: newServer });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to register server' });
   }
 });
 
-// 4. Delete Monitored Server
-app.delete('/api/admin/servers/:id', (req, res) => {
-  if (!isRequesterAdmin(req)) {
-    return res.status(403).json({ error: 'Access denied: Galaxy Cord Administrator privileges required.' });
+// 4. Delete Server (Admin and General)
+app.delete(['/api/admin/servers/:id', '/api/servers/:id'], async (req, res) => {
+  const { id } = req.params;
+  if (!id || id === 'nexus-global-community') {
+    return res.status(400).json({ error: 'Cannot delete default community hub' });
   }
 
-  const { id } = req.params;
   const idx = registeredServers.findIndex(s => s.id === id);
   if (idx !== -1) {
     registeredServers.splice(idx, 1);
-    return res.json({ success: true });
   }
-  res.status(404).json({ error: 'Server not found' });
+
+  try {
+    await neonDb.deleteServer(id);
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
 });
 
 // 5. Admin Accounts List (With moderation status, roles, bans, timeouts)

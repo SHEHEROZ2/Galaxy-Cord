@@ -12,7 +12,7 @@ import {
 } from "./server-db.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const PORT = parseInt(process.env.PORT || "3000", 10);
+const PORT = 3e3;
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ noServer: true });
@@ -1102,7 +1102,7 @@ app.get("/api/auth/neon/config", (req, res) => {
     postgresConfigured: !!process.env.DATABASE_URL
   });
 });
-app.post("/api/auth/register", (req, res) => {
+app.post("/api/auth/register", async (req, res) => {
   try {
     const { username, email, password, avatar, bio, guestId } = req.body;
     if (!username || username.trim().length < 2) {
@@ -1137,28 +1137,36 @@ app.post("/api/auth/register", (req, res) => {
         email: cleanEmail,
         password,
         avatar: avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${cleanUsername}`,
-        bio: bio || "NexusCord user",
+        bio: bio || "Galaxy Cord user",
         status: "online",
         createdAt: Date.now()
       };
       accounts.push(existingGuest);
-      friendships.push({
+      const fr1 = {
         id: "fr-" + Date.now(),
         userA: "user-elena",
         userB: accountId,
         requesterId: "user-elena",
         status: "friends",
         updatedAt: Date.now()
-      });
-      friendships.push({
+      };
+      const fr2 = {
         id: "fr-req-" + Date.now(),
         userA: "user-cybernova",
         userB: accountId,
         requesterId: "user-cybernova",
         status: "pending",
         updatedAt: Date.now()
-      });
+      };
+      friendships.push(fr1, fr2);
+      await Promise.all([
+        neonDb.insertFriendship(fr1).catch(() => {
+        }),
+        neonDb.insertFriendship(fr2).catch(() => {
+        })
+      ]);
     }
+    await neonDb.insertAccount(existingGuest);
     persistDatabase();
     res.json({
       success: true,
@@ -1253,7 +1261,7 @@ app.get("/api/auth/me", (req, res) => {
     timedOutUntil: account.timedOutUntil
   });
 });
-app.put("/api/auth/profile", (req, res) => {
+app.put("/api/auth/profile", async (req, res) => {
   try {
     const { userId, name, avatar, bio, status, customStatus } = req.body;
     if (!userId) return res.status(400).json({ error: "Missing userId" });
@@ -1264,6 +1272,7 @@ app.put("/api/auth/profile", (req, res) => {
     if (bio !== void 0) account.bio = bio;
     if (status) account.status = status;
     if (customStatus !== void 0) account.customStatus = customStatus;
+    await neonDb.insertAccount(account);
     persistDatabase();
     const client = clients.get(userId);
     if (client) {
@@ -1322,6 +1331,26 @@ app.get("/api/messages", (req, res) => {
     filtered = filtered.filter((m) => m.channelId === channelId);
   }
   res.json(filtered.slice(-150));
+});
+app.get("/api/members", (req, res) => {
+  try {
+    const list = accounts.map((a) => {
+      const isOnline = clients.has(a.id);
+      return {
+        id: a.id,
+        name: a.username,
+        tag: a.tag,
+        avatar: a.avatar,
+        status: isOnline ? "online" : a.status || "offline",
+        customStatus: a.customStatus,
+        role: a.role || (a.username.toLowerCase() === "galaxy505g" ? "admin" : "member"),
+        bio: a.bio
+      };
+    });
+    res.json(list);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 app.get("/api/users/search", (req, res) => {
   const query = (req.query.q || "").trim().toLowerCase();
@@ -1581,7 +1610,7 @@ app.get("/api/servers/public", (req, res) => {
       voiceMembers: 4,
       latency: 4
     },
-    ...registeredServers.map((s) => ({
+    ...registeredServers.filter((s) => s.id !== "nexus-global-community").map((s) => ({
       id: s.id,
       name: s.name,
       description: s.description,
@@ -1625,7 +1654,7 @@ app.get("/api/admin/servers", (req, res) => {
         isDefault: true,
         isSelfHosted: false
       },
-      ...registeredServers.map((s) => {
+      ...registeredServers.filter((s) => s.id !== "nexus-global-community").map((s) => {
         const liveCount = serverCounts[s.id]?.members || 0;
         const liveVoice = serverCounts[s.id]?.voice || 0;
         const isOnline = s.isOnline !== false;
@@ -1650,40 +1679,66 @@ app.get("/api/admin/servers", (req, res) => {
     res.status(500).json({ error: err.message || "Failed to fetch servers" });
   }
 });
-app.post("/api/admin/servers/register", (req, res) => {
+app.post(["/api/admin/servers/register", "/api/servers"], async (req, res) => {
   try {
-    if (!isRequesterAdmin(req)) {
-      return res.status(403).json({ error: "Access denied: Galaxy Cord Administrator privileges required." });
+    const { name, url, description, channelsCount, icon, id } = req.body;
+    if (!name) {
+      return res.status(400).json({ error: "Server name is required" });
     }
-    const { name, url, description, channelsCount } = req.body;
-    if (!name || !url) {
-      return res.status(400).json({ error: "Server name and WebSocket URL are required" });
-    }
+    const hostAddress = req.headers.host || `localhost:${PORT}`;
+    const wsProto = req.headers["x-forwarded-proto"] === "https" ? "wss" : "ws";
+    const effectiveUrl = (url || `${wsProto}://${hostAddress}/ws`).trim();
+    const srvId = id || "srv-" + Date.now().toString(36);
     const newServer = {
-      id: "srv-" + Date.now().toString(36),
+      id: srvId,
       name: name.trim(),
-      description: description?.trim() || "",
-      url: url.trim(),
+      description: description?.trim() || "Community Server",
+      url: effectiveUrl,
+      icon: icon || "\u26A1",
       createdAt: Date.now(),
       channelsCount: channelsCount ? parseInt(channelsCount, 10) : 5
     };
-    registeredServers.push(newServer);
+    const existingIdx = registeredServers.findIndex((s) => s.id === srvId);
+    if (existingIdx !== -1) {
+      registeredServers[existingIdx] = newServer;
+    } else {
+      registeredServers.push(newServer);
+    }
+    await neonDb.insertServer({
+      id: srvId,
+      name: newServer.name,
+      description: newServer.description,
+      url: newServer.url,
+      icon: newServer.icon,
+      ownerId: "user",
+      createdAt: newServer.createdAt,
+      channelsCount: newServer.channelsCount,
+      isDefault: false,
+      activeMembers: 1,
+      voiceMembers: 0,
+      isOnline: true,
+      latency: 20
+    });
     res.json({ success: true, server: newServer });
   } catch (err) {
     res.status(500).json({ error: err.message || "Failed to register server" });
   }
 });
-app.delete("/api/admin/servers/:id", (req, res) => {
-  if (!isRequesterAdmin(req)) {
-    return res.status(403).json({ error: "Access denied: Galaxy Cord Administrator privileges required." });
-  }
+app.delete(["/api/admin/servers/:id", "/api/servers/:id"], async (req, res) => {
   const { id } = req.params;
+  if (!id || id === "nexus-global-community") {
+    return res.status(400).json({ error: "Cannot delete default community hub" });
+  }
   const idx = registeredServers.findIndex((s) => s.id === id);
   if (idx !== -1) {
     registeredServers.splice(idx, 1);
-    return res.json({ success: true });
   }
-  res.status(404).json({ error: "Server not found" });
+  try {
+    await neonDb.deleteServer(id);
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
 });
 app.get("/api/admin/accounts", (req, res) => {
   try {
