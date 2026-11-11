@@ -552,6 +552,132 @@ function handleEdgeWebSocket(ws: WebSocket, env: Env, host: string, isHttps: boo
   });
 }
 
+function encodeWebSocketFrame(data: any, opcode = 1): Uint8Array {
+  let payload: Uint8Array;
+  if (typeof data === 'string') {
+    payload = new TextEncoder().encode(data);
+    opcode = 1;
+  } else if (data instanceof Uint8Array) {
+    payload = data;
+    opcode = 2;
+  } else if (data instanceof ArrayBuffer) {
+    payload = new Uint8Array(data);
+    opcode = 2;
+  } else {
+    payload = new TextEncoder().encode(String(data));
+    opcode = 1;
+  }
+
+  const len = payload.length;
+  let headerLen = 2 + 4; // 2 basic bytes + 4 bytes mask key
+  if (len >= 126 && len <= 65535) {
+    headerLen += 2;
+  } else if (len > 65535) {
+    headerLen += 8;
+  }
+
+  const frame = new Uint8Array(headerLen + len);
+  frame[0] = 0x80 | (opcode & 0x0f); // FIN + opcode
+
+  let maskOffset = 2;
+  if (len < 126) {
+    frame[1] = 0x80 | len;
+  } else if (len <= 65535) {
+    frame[1] = 0x80 | 126;
+    frame[2] = (len >> 8) & 0xff;
+    frame[3] = len & 0xff;
+    maskOffset = 4;
+  } else {
+    frame[1] = 0x80 | 127;
+    const bigLen = BigInt(len);
+    for (let i = 0; i < 8; i++) {
+      frame[2 + i] = Number((bigLen >> BigInt(8 * (7 - i))) & 0xffn);
+    }
+    maskOffset = 10;
+  }
+
+  const maskKey = new Uint8Array(4);
+  crypto.getRandomValues(maskKey);
+  frame.set(maskKey, maskOffset);
+
+  const payloadOffset = maskOffset + 4;
+  for (let i = 0; i < len; i++) {
+    frame[payloadOffset + i] = payload[i] ^ maskKey[i % 4];
+  }
+
+  return frame;
+}
+
+function decodeWebSocketFrames(
+  buffer: Uint8Array<any>,
+  onMessage: (msg: string | Uint8Array, opcode: number) => void
+): Uint8Array<any> {
+  let offset = 0;
+  while (offset + 2 <= buffer.length) {
+    const b0 = buffer[offset];
+    const b1 = buffer[offset + 1];
+
+    const opcode = b0 & 0x0f;
+    const isMasked = (b1 & 0x80) !== 0;
+    let payloadLen = b1 & 0x7f;
+
+    let headerSize = 2;
+    if (payloadLen === 126) {
+      if (offset + 4 > buffer.length) break;
+      payloadLen = (buffer[offset + 2] << 8) | buffer[offset + 3];
+      headerSize += 2;
+    } else if (payloadLen === 127) {
+      if (offset + 10 > buffer.length) break;
+      let fullLen = 0n;
+      for (let i = 0; i < 8; i++) {
+        fullLen = (fullLen << 8n) | BigInt(buffer[offset + 2 + i]);
+      }
+      payloadLen = Number(fullLen);
+      headerSize += 8;
+    }
+
+    if (isMasked) {
+      headerSize += 4;
+    }
+
+    if (offset + headerSize + payloadLen > buffer.length) {
+      // Incomplete frame, wait for more chunks
+      break;
+    }
+
+    let maskKey: Uint8Array | null = null;
+    if (isMasked) {
+      maskKey = buffer.subarray(offset + headerSize - 4, offset + headerSize);
+    }
+
+    const rawPayload = buffer.subarray(offset + headerSize, offset + headerSize + payloadLen);
+    let payload = rawPayload;
+    if (isMasked && maskKey) {
+      payload = new Uint8Array(payloadLen);
+      for (let i = 0; i < payloadLen; i++) {
+        payload[i] = rawPayload[i] ^ maskKey[i % 4];
+      }
+    }
+
+    if (opcode === 1) {
+      const text = new TextDecoder().decode(payload);
+      onMessage(text, opcode);
+    } else if (opcode === 2) {
+      onMessage(payload, opcode);
+    } else if (opcode === 8) {
+      onMessage('CLOSE', opcode);
+    } else if (opcode === 9) {
+      onMessage(payload, opcode);
+    } else if (opcode === 10) {
+      onMessage(payload, opcode);
+    }
+
+    offset += headerSize + payloadLen;
+  }
+
+  return buffer.subarray(offset);
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -607,94 +733,260 @@ export default {
       // @ts-ignore
       server.accept();
 
-      (async () => {
-        let remoteWs: any = null;
+      // Buffer incoming client messages immediately so none are lost during connection setup
+      const pendingClientMessages: any[] = [];
+      let isBridgeReady = false;
+      let forwardToRemote: ((data: any) => Promise<void>) | null = null;
+      let isClosed = false;
 
-        // Step 1: Attempt direct Cloudflare edge connection
-        // Note: fetch() requires http:// or https:// scheme instead of ws://
-        const httpTarget = target.replace(/^ws:\/\//i, 'http://').replace(/^wss:\/\//i, 'https://');
+      server.addEventListener('message', async (e: any) => {
+        if (isBridgeReady && forwardToRemote) {
+          try {
+            await forwardToRemote(e.data);
+          } catch {}
+        } else {
+          pendingClientMessages.push(e.data);
+        }
+      });
+
+      server.addEventListener('close', () => {
+        isClosed = true;
+      });
+
+      (async () => {
+        let cleanTarget = target.trim();
+        if (!cleanTarget.startsWith('ws://') && !cleanTarget.startsWith('wss://')) {
+          cleanTarget = `ws://${cleanTarget}`;
+        }
+
+        let hostname = '';
+        let port = 80;
+        let pathname = '/';
+        let httpHref = '';
+
         try {
-          const resp = await fetch(httpTarget, {
-            headers: { Upgrade: 'websocket' },
+          const parsed = new URL(cleanTarget.replace(/^ws:\/\//i, 'http://').replace(/^wss:\/\//i, 'https://'));
+          hostname = parsed.hostname;
+          port = parsed.port ? parseInt(parsed.port, 10) : (parsed.protocol === 'https:' ? 443 : 80);
+          pathname = parsed.pathname && parsed.pathname !== '' ? `${parsed.pathname}${parsed.search}` : '/';
+          httpHref = parsed.href;
+        } catch {
+          try {
+            server.send(JSON.stringify({ type: 'proxy:error', target, message: 'Invalid target server URL format' }));
+            server.close(1000);
+          } catch {}
+          return;
+        }
+
+        // Generate RFC 6455 16-byte base64 nonce key
+        const secKey = btoa(
+          Array.from(crypto.getRandomValues(new Uint8Array(16)))
+            .map((b) => String.fromCharCode(b))
+            .join('')
+        );
+
+        // TIER 1: Standard fetch() with all mandatory WebSocket upgrade headers
+        let remoteWs: any = null;
+        try {
+          const resp = await fetch(httpHref, {
+            headers: {
+              'Upgrade': 'websocket',
+              'Connection': 'Upgrade',
+              'Sec-WebSocket-Key': secKey,
+              'Sec-WebSocket-Version': '13',
+            },
           });
           if (resp.status === 101 && (resp as any).webSocket) {
             remoteWs = (resp as any).webSocket;
           }
         } catch (edgeErr) {
-          console.warn(`Direct edge connection to ${httpTarget} failed:`, edgeErr);
+          console.warn(`Direct fetch to ${httpHref} failed:`, edgeErr);
         }
 
-        // Step 2: Fallback to Node.js proxy relay on port 443 if direct edge port is restricted
-        if (!remoteWs) {
+        if (remoteWs && !isClosed) {
           try {
-            const relayTarget = `https://ais-dev-5nuygcrl2zry2chikqp5jn-755406334239.asia-east1.run.app/ws-proxy?target=${encodeURIComponent(target)}`;
-            const relayResp = await fetch(relayTarget, {
-              headers: { Upgrade: 'websocket' },
-            });
-            if (relayResp.status === 101 && (relayResp as any).webSocket) {
-              remoteWs = (relayResp as any).webSocket;
+            remoteWs.accept();
+
+            forwardToRemote = async (data: any) => {
+              if (remoteWs.readyState === 1) remoteWs.send(data);
+            };
+            isBridgeReady = true;
+
+            // Flush pending client messages
+            while (pendingClientMessages.length > 0) {
+              const msg = pendingClientMessages.shift();
+              remoteWs.send(msg);
             }
-          } catch (relayErr) {
-            console.warn(`Relay proxy connection failed for ${target}:`, relayErr);
+
+            remoteWs.addEventListener('message', (e: any) => {
+              try {
+                server.send(e.data);
+              } catch {}
+            });
+
+            server.addEventListener('close', (e: any) => {
+              try {
+                const code = (e.code >= 1000 && e.code <= 4999 && e.code !== 1004 && e.code !== 1005 && e.code !== 1006) ? e.code : 1000;
+                remoteWs.close(code, e.reason);
+              } catch {}
+            });
+
+            remoteWs.addEventListener('close', (e: any) => {
+              try {
+                const code = (e.code >= 1000 && e.code <= 4999 && e.code !== 1004 && e.code !== 1005 && e.code !== 1006) ? e.code : 1000;
+                server.close(code, e.reason);
+              } catch {}
+            });
+
+            server.addEventListener('error', () => {
+              try { remoteWs.close(1000); } catch {}
+            });
+
+            remoteWs.addEventListener('error', () => {
+              try { server.close(1000); } catch {}
+            });
+            return;
+          } catch (err: any) {
+            console.warn('Error setting up remoteWs listeners:', err);
           }
         }
 
-        if (!remoteWs) {
+        // TIER 2: Direct raw TCP socket via cloudflare:sockets (bypasses Cloudflare edge HTTP proxy port blocks)
+        if (!isClosed) {
           try {
-            server.send(
-              JSON.stringify({
-                type: 'proxy:error',
-                target,
-                message: `Unable to reach Pterodactyl node at ${target}. Please verify your container is active and port is accessible.`,
-              })
-            );
-            server.close(1000, 'Remote connection failed');
-          } catch {}
-          return;
+            // @ts-ignore
+            const { connect } = await import('cloudflare:sockets');
+            const tcpSocket = connect({ hostname, port });
+            const writer = tcpSocket.writable.getWriter();
+            const reader = tcpSocket.readable.getReader();
+
+            // Send HTTP 101 Upgrade Request over TCP
+            const handshakeReq =
+              `GET ${pathname} HTTP/1.1\r\n` +
+              `Host: ${hostname}:${port}\r\n` +
+              `Connection: Upgrade\r\n` +
+              `Upgrade: websocket\r\n` +
+              `Sec-WebSocket-Key: ${secKey}\r\n` +
+              `Sec-WebSocket-Version: 13\r\n\r\n`;
+
+            await writer.write(new TextEncoder().encode(handshakeReq));
+
+            // Accumulate handshake response until \r\n\r\n
+            let handshakeBuffer = new Uint8Array(0);
+            let handshakeDone = false;
+            let leftoverBuffer = new Uint8Array(0);
+
+            while (!handshakeDone) {
+              const { done, value } = await reader.read();
+              if (done || !value) break;
+
+              const next = new Uint8Array(handshakeBuffer.length + value.length);
+              next.set(handshakeBuffer);
+              next.set(value, handshakeBuffer.length);
+              handshakeBuffer = next;
+
+              const text = new TextDecoder().decode(handshakeBuffer);
+              const headerEndIdx = text.indexOf('\r\n\r\n');
+              if (headerEndIdx !== -1) {
+                if (text.includes('101 Switching Protocols') || text.includes('101')) {
+                  handshakeDone = true;
+                  const headerBytes = new TextEncoder().encode(text.slice(0, headerEndIdx + 4)).length;
+                  if (handshakeBuffer.length > headerBytes) {
+                    leftoverBuffer = handshakeBuffer.subarray(headerBytes);
+                  }
+                  break;
+                } else {
+                  console.warn('TCP Handshake returned non-101:', text.slice(0, 200));
+                  break;
+                }
+              }
+            }
+
+            if (handshakeDone && !isClosed) {
+              forwardToRemote = async (data: any) => {
+                const frame = encodeWebSocketFrame(data);
+                await writer.write(frame);
+              };
+              isBridgeReady = true;
+
+              // Flush pending client messages
+              while (pendingClientMessages.length > 0) {
+                const msg = pendingClientMessages.shift();
+                const frame = encodeWebSocketFrame(msg);
+                await writer.write(frame);
+              }
+
+              server.addEventListener('close', () => {
+                try {
+                  writer.write(encodeWebSocketFrame('CLOSE', 8));
+                  tcpSocket.close();
+                } catch {}
+              });
+
+              // Process remote TCP incoming frames -> Client WebSocket
+              (async () => {
+                try {
+                  let accumulated: Uint8Array<any> = leftoverBuffer;
+                  if (accumulated.length > 0) {
+                    accumulated = decodeWebSocketFrames(accumulated, (msg: string | Uint8Array, opcode: number) => {
+                      if (opcode === 8) {
+                        try { server.close(1000); } catch {}
+                        try { tcpSocket.close(); } catch {}
+                      } else if (opcode === 9) {
+                        try { writer.write(encodeWebSocketFrame(msg, 10)); } catch {}
+                      } else {
+                        try { server.send(msg); } catch {}
+                      }
+                    });
+                  }
+
+                  while (true) {
+                    const { done, value } = await reader.read();
+                    if (done || !value) break;
+
+                    const merged = new Uint8Array(accumulated.length + value.length);
+                    merged.set(accumulated);
+                    merged.set(value, accumulated.length);
+
+                    accumulated = decodeWebSocketFrames(merged, (msg: string | Uint8Array, opcode: number) => {
+                      if (opcode === 8) {
+                        try { server.close(1000); } catch {}
+                        try { tcpSocket.close(); } catch {}
+                      } else if (opcode === 9) {
+                        try { writer.write(encodeWebSocketFrame(msg, 10)); } catch {}
+                      } else {
+                        try { server.send(msg); } catch {}
+                      }
+                    });
+                  }
+                } catch (readErr) {
+                  console.warn('TCP stream read error:', readErr);
+                } finally {
+                  try { server.close(1000); } catch {}
+                  try { tcpSocket.close(); } catch {}
+                }
+              })();
+
+              return;
+            }
+
+            tcpSocket.close();
+          } catch (tcpErr) {
+            console.warn('TCP socket fallback failed:', tcpErr);
+          }
         }
 
+        // Both Tier 1 and Tier 2 failed: report clear error
         try {
-          remoteWs.accept();
-
-          server.addEventListener('message', (e: any) => {
-            try {
-              if (remoteWs.readyState === 1) remoteWs.send(e.data);
-            } catch {}
-          });
-
-          remoteWs.addEventListener('message', (e: any) => {
-            try {
-              if (server.readyState === 1) server.send(e.data);
-            } catch {}
-          });
-
-          server.addEventListener('close', (e: any) => {
-            try {
-              const code = (e.code >= 1000 && e.code <= 4999 && e.code !== 1004 && e.code !== 1005 && e.code !== 1006) ? e.code : 1000;
-              remoteWs.close(code, e.reason);
-            } catch {}
-          });
-
-          remoteWs.addEventListener('close', (e: any) => {
-            try {
-              const code = (e.code >= 1000 && e.code <= 4999 && e.code !== 1004 && e.code !== 1005 && e.code !== 1006) ? e.code : 1000;
-              server.close(code, e.reason);
-            } catch {}
-          });
-
-          server.addEventListener('error', () => {
-            try { remoteWs.close(1000); } catch {}
-          });
-
-          remoteWs.addEventListener('error', () => {
-            try { server.close(1000); } catch {}
-          });
-        } catch (err: any) {
-          try {
-            server.send(JSON.stringify({ type: 'proxy:error', target, message: err.message }));
-            server.close(1000);
-          } catch {}
-        }
+          server.send(
+            JSON.stringify({
+              type: 'proxy:error',
+              target,
+              message: `Unable to reach Pterodactyl node at ${target}. Please verify your container is active and port ${port} is open.`,
+            })
+          );
+          server.close(1000, 'Remote connection failed');
+        } catch {}
       })();
 
       return new Response(null, {
