@@ -162,7 +162,16 @@ export const HostServerModal: React.FC<HostServerModalProps> = ({
 
     const startTime = Date.now();
     try {
-      const testWs = new WebSocket(connectUrl);
+      let targetTestUrl = connectUrl.trim();
+      if (
+        typeof window !== 'undefined' &&
+        window.location.protocol === 'https:' &&
+        targetTestUrl.startsWith('ws://')
+      ) {
+        targetTestUrl = `wss://${window.location.host}/ws-proxy?target=${encodeURIComponent(targetTestUrl)}`;
+      }
+
+      const testWs = new WebSocket(targetTestUrl);
       const timer = setTimeout(() => {
         testWs.close();
         setIsTesting(false);
@@ -170,7 +179,7 @@ export const HostServerModal: React.FC<HostServerModalProps> = ({
           success: false,
           message: 'Connection timed out. Make sure your server is running on ' + connectUrl,
         });
-      }, 3500);
+      }, 5000);
 
       testWs.onopen = () => {
         const latency = Date.now() - startTime;

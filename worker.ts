@@ -588,7 +588,7 @@ export default {
       });
     }
 
-    // 0b. WebSocket Proxy Bridge for /ws-proxy (allows connecting to remote self-hosted servers from HTTPS)
+    // 0b. WebSocket Proxy Bridge for /ws-proxy (allows connecting to remote self-hosted / Pterodactyl servers from HTTPS)
     if (url.pathname === '/ws-proxy') {
       const target = url.searchParams.get('target');
       if (!target) {
@@ -600,7 +600,7 @@ export default {
         return new Response('Expected Upgrade: websocket', { status: 426 });
       }
 
-      // @ts-ignore
+      // @ts-ignore Cloudflare WebSocketPair
       const pair = new WebSocketPair();
       const client = pair[0];
       const server = pair[1];
@@ -608,16 +608,52 @@ export default {
       server.accept();
 
       (async () => {
+        let remoteWs: any = null;
+
+        // Step 1: Attempt direct Cloudflare edge connection
+        // Note: fetch() requires http:// or https:// scheme instead of ws://
+        const httpTarget = target.replace(/^ws:\/\//i, 'http://').replace(/^wss:\/\//i, 'https://');
         try {
-          const resp = await fetch(target, {
+          const resp = await fetch(httpTarget, {
             headers: { Upgrade: 'websocket' },
           });
-          const remoteWs = (resp as any).webSocket;
-          if (!remoteWs) {
-            server.send(JSON.stringify({ type: 'proxy:error', message: 'Remote server did not accept WebSocket upgrade' }));
-            server.close();
-            return;
+          if (resp.status === 101 && (resp as any).webSocket) {
+            remoteWs = (resp as any).webSocket;
           }
+        } catch (edgeErr) {
+          console.warn(`Direct edge connection to ${httpTarget} failed:`, edgeErr);
+        }
+
+        // Step 2: Fallback to Node.js proxy relay on port 443 if direct edge port is restricted
+        if (!remoteWs) {
+          try {
+            const relayTarget = `https://ais-dev-5nuygcrl2zry2chikqp5jn-755406334239.asia-east1.run.app/ws-proxy?target=${encodeURIComponent(target)}`;
+            const relayResp = await fetch(relayTarget, {
+              headers: { Upgrade: 'websocket' },
+            });
+            if (relayResp.status === 101 && (relayResp as any).webSocket) {
+              remoteWs = (relayResp as any).webSocket;
+            }
+          } catch (relayErr) {
+            console.warn(`Relay proxy connection failed for ${target}:`, relayErr);
+          }
+        }
+
+        if (!remoteWs) {
+          try {
+            server.send(
+              JSON.stringify({
+                type: 'proxy:error',
+                target,
+                message: `Unable to reach Pterodactyl node at ${target}. Please verify your container is active and port is accessible.`,
+              })
+            );
+            server.close(1000, 'Remote connection failed');
+          } catch {}
+          return;
+        }
+
+        try {
           remoteWs.accept();
 
           server.addEventListener('message', (e: any) => {
@@ -625,21 +661,38 @@ export default {
               if (remoteWs.readyState === 1) remoteWs.send(e.data);
             } catch {}
           });
+
           remoteWs.addEventListener('message', (e: any) => {
             try {
               if (server.readyState === 1) server.send(e.data);
             } catch {}
           });
-          server.addEventListener('close', () => {
-            try { remoteWs.close(); } catch {}
+
+          server.addEventListener('close', (e: any) => {
+            try {
+              const code = (e.code >= 1000 && e.code <= 4999 && e.code !== 1004 && e.code !== 1005 && e.code !== 1006) ? e.code : 1000;
+              remoteWs.close(code, e.reason);
+            } catch {}
           });
-          remoteWs.addEventListener('close', () => {
-            try { server.close(); } catch {}
+
+          remoteWs.addEventListener('close', (e: any) => {
+            try {
+              const code = (e.code >= 1000 && e.code <= 4999 && e.code !== 1004 && e.code !== 1005 && e.code !== 1006) ? e.code : 1000;
+              server.close(code, e.reason);
+            } catch {}
+          });
+
+          server.addEventListener('error', () => {
+            try { remoteWs.close(1000); } catch {}
+          });
+
+          remoteWs.addEventListener('error', () => {
+            try { server.close(1000); } catch {}
           });
         } catch (err: any) {
           try {
-            server.send(JSON.stringify({ type: 'proxy:error', message: 'Failed to connect to target: ' + err.message }));
-            server.close();
+            server.send(JSON.stringify({ type: 'proxy:error', target, message: err.message }));
+            server.close(1000);
           } catch {}
         }
       })();

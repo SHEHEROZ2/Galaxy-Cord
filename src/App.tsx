@@ -407,7 +407,12 @@ export default function App() {
 
     const unsubError = socketService.on('connection:error', (data) => {
       setIsConnected(false);
-      setConnectionError(data?.error || 'Connection failed');
+      const friendlyErr =
+        data?.error ||
+        (activeServer.isSelfHosted
+          ? `Unable to reach ${activeServer.name || 'server'} (${activeServer.url}). Please verify that your Pterodactyl container or server process is running.`
+          : 'Connection failed');
+      setConnectionError(friendlyErr);
     });
 
     const unsubLatency = socketService.on('latency', (ms) => {
@@ -844,9 +849,13 @@ export default function App() {
     let apiUrl = `/api/messages?serverId=${encodeURIComponent(targetServerId)}&channelId=${encodeURIComponent(targetChannelId)}`;
     if (activeServer.isSelfHosted && activeServer.url && !activeServer.url.includes('/ws')) {
       try {
+        const isCurrentHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
         const parsed = new URL(activeServer.url);
-        const httpProto = parsed.protocol === 'wss:' ? 'https:' : 'http:';
-        apiUrl = `${httpProto}//${parsed.host}/api/messages?channelId=${encodeURIComponent(targetChannelId)}`;
+        // Only use direct remote HTTP if not blocked by mixed content policies
+        if (!isCurrentHttps || parsed.protocol === 'https:' || parsed.protocol === 'wss:') {
+          const httpProto = parsed.protocol === 'wss:' ? 'https:' : 'http:';
+          apiUrl = `${httpProto}//${parsed.host}/api/messages?channelId=${encodeURIComponent(targetChannelId)}`;
+        }
       } catch (e) {}
     }
 
@@ -1062,6 +1071,7 @@ export default function App() {
   const handleNavigateToCommunity = (targetChannelId?: string) => {
     const communityServer = servers.find((s) => s.id === 'nexus-global-community') || servers[0];
     setActiveServerId('nexus-global-community');
+    setConnectionError(null);
     setChannels(communityServer.channels);
 
     let targetChannel = targetChannelId

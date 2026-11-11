@@ -233,24 +233,54 @@ export const ChannelSidebar: React.FC<ChannelSidebarProps> = ({
         )}
       </div>
 
-      {/* Self-hosted connection status badge */}
+      {/* Self-hosted connection status badge & error banner */}
       {server.isSelfHosted && (
-        <div className="px-3 py-1.5 border-b border-[#1f2023] flex items-center justify-between text-[11px]">
-          <div className="flex items-center gap-1.5 truncate">
-            <span
-              className={`w-2 h-2 rounded-full shrink-0 ${
-                isConnected && !connectionError
-                  ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50'
-                  : 'bg-amber-400 animate-pulse'
-              }`}
-            />
-            <span className="truncate text-zinc-300 font-medium">
-              {isConnected && !connectionError ? 'Secure Bridge Active' : 'Connecting to Node...'}
+        <div className="px-3 py-2 border-b border-[#1f2023] space-y-1.5 text-[11px]">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5 truncate">
+              <span
+                className={`w-2 h-2 rounded-full shrink-0 ${
+                  isConnected && !connectionError
+                    ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50'
+                    : connectionError
+                    ? 'bg-red-400'
+                    : 'bg-amber-400 animate-pulse'
+                }`}
+              />
+              <span className={`truncate font-medium ${connectionError ? 'text-red-400' : 'text-zinc-300'}`}>
+                {isConnected && !connectionError
+                  ? 'Secure Bridge Active'
+                  : connectionError
+                  ? 'Node Unreachable'
+                  : 'Connecting to Node...'}
+              </span>
+            </div>
+            <span className="text-[10px] text-zinc-400 font-mono shrink-0 ml-1">
+              {isConnected && !connectionError ? (latency > 0 ? `${latency}ms` : 'Online') : connectionError ? 'Offline' : 'Syncing'}
             </span>
           </div>
-          <span className="text-[10px] text-zinc-400 font-mono shrink-0 ml-1">
-            {isConnected && !connectionError ? (latency > 0 ? `${latency}ms` : 'Online') : 'Syncing'}
-          </span>
+
+          {connectionError && (
+            <div className="p-2 rounded bg-red-950/40 border border-red-800/40 text-red-200 text-[11px] space-y-1.5">
+              <p className="line-clamp-2 text-[10px] text-red-300">{connectionError}</p>
+              <div className="flex items-center gap-1.5 pt-1">
+                {onNavigateToCommunity && (
+                  <button
+                    onClick={() => onNavigateToCommunity()}
+                    className="px-2 py-1 bg-red-600/80 hover:bg-red-600 text-white font-bold rounded text-[10px] transition-colors cursor-pointer"
+                  >
+                    Go to Global Hub
+                  </button>
+                )}
+                <button
+                  onClick={() => window.location.reload()}
+                  className="px-2 py-1 bg-[#2b2d31] hover:bg-[#35373c] text-zinc-300 font-medium rounded text-[10px] transition-colors border border-zinc-700 cursor-pointer"
+                >
+                  Retry
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

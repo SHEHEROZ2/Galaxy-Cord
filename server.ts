@@ -53,25 +53,35 @@ proxyWss.on('connection', (clientWs: WebSocket, request: http.IncomingMessage) =
     const target = parsedUrl.searchParams.get('target');
 
     if (!target) {
-      clientWs.send(JSON.stringify({ type: 'error', message: 'Missing target remote server URL' }));
-      clientWs.close();
+      try {
+        clientWs.send(JSON.stringify({ type: 'error', message: 'Missing target remote server URL' }));
+        clientWs.close(1000, 'Missing target URL');
+      } catch {}
       return;
     }
 
     console.log(`🔀 [WS Proxy] Establishing bridge to remote server: ${target}`);
 
+    let clientClosed = false;
+    let remoteClosed = false;
     let remoteWs: WebSocket;
+
     try {
       remoteWs = new WebSocket(target, {
-        handshakeTimeout: 10000,
+        handshakeTimeout: 8000,
       });
     } catch (err: any) {
-      console.error(`❌ [WS Proxy] Remote socket creation failed for ${target}:`, err.message);
-      clientWs.send(JSON.stringify({
-        type: 'proxy:error',
-        message: `Failed to initiate connection to ${target}: ${err.message}`
-      }));
-      clientWs.close();
+      console.warn(`❌ [WS Proxy] Remote socket creation failed for ${target}:`, err.message);
+      if (clientWs.readyState === WebSocket.OPEN) {
+        try {
+          clientWs.send(JSON.stringify({
+            type: 'proxy:error',
+            target,
+            message: `Failed to initiate connection to ${target}: ${err.message}`
+          }));
+          clientWs.close(1000, 'Connection initiation failed');
+        } catch {}
+      }
       return;
     }
 
@@ -101,32 +111,56 @@ proxyWss.on('connection', (clientWs: WebSocket, request: http.IncomingMessage) =
       }
     });
 
-    remoteWs.on('error', (err) => {
-      console.error(`⚠️ [WS Proxy] Remote error connecting to ${target}:`, err.message);
+    remoteWs.on('error', (err: any) => {
+      // If the client intentionally navigated away or closed the connection,
+      // "WebSocket was closed before the connection was established" is an expected abort.
+      if (clientClosed) return;
+
+      const isEarlyClose = err?.message?.includes('closed before the connection was established');
+      if (!isEarlyClose) {
+        console.warn(`⚠️ [WS Proxy] Remote connection to ${target} failed:`, err.message);
+      }
+
       if (clientWs.readyState === WebSocket.OPEN) {
-        clientWs.send(JSON.stringify({
-          type: 'proxy:error',
-          target,
-          message: `Unable to connect to ${target}. Please verify your Pterodactyl container is active and the port is reachable.`
-        }));
+        try {
+          clientWs.send(JSON.stringify({
+            type: 'proxy:error',
+            target,
+            message: `Unable to connect to ${target}. Please verify your Pterodactyl container is active and port is reachable.`
+          }));
+          clientWs.close(1000, 'Remote host unreachable');
+        } catch {}
       }
     });
 
     remoteWs.on('close', (code, reason) => {
-      console.log(`🔌 [WS Proxy] Remote socket closed (${target})`);
+      remoteClosed = true;
+      if (!clientClosed) {
+        console.log(`🔌 [WS Proxy] Remote socket closed (${target})`);
+      }
       if (clientWs.readyState === WebSocket.OPEN) {
-        clientWs.close(code, reason);
+        const safeCode = (code >= 1000 && code <= 4999 && code !== 1004 && code !== 1005 && code !== 1006) ? code : 1000;
+        try {
+          clientWs.close(safeCode, reason ? reason.toString() : undefined);
+        } catch {
+          clientWs.terminate();
+        }
       }
     });
 
     clientWs.on('close', () => {
-      if (remoteWs.readyState === WebSocket.OPEN || remoteWs.readyState === WebSocket.CONNECTING) {
-        remoteWs.close();
+      clientClosed = true;
+      if (!remoteClosed) {
+        if (remoteWs.readyState === WebSocket.OPEN) {
+          try { remoteWs.close(1000, 'Client closed bridge'); } catch {}
+        } else if (remoteWs.readyState === WebSocket.CONNECTING) {
+          try { remoteWs.terminate(); } catch {}
+        }
       }
     });
   } catch (err: any) {
     console.error('WS Proxy connection exception:', err);
-    clientWs.close();
+    try { clientWs.close(1000, 'Internal proxy error'); } catch {}
   }
 });
 
