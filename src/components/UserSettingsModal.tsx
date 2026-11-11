@@ -12,7 +12,8 @@ import {
   Sparkles,
   User as UserIcon,
   Volume2,
-  X
+  X,
+  LogOut,
 } from 'lucide-react';
 
 interface UserSettingsModalProps {
@@ -21,6 +22,7 @@ interface UserSettingsModalProps {
   currentUser: User;
   onUpdateUser: (updates: Partial<User>) => void;
   onOpenAuthModal?: () => void;
+  onLogout?: () => void;
 }
 
 const AVATAR_PRESETS = [
@@ -40,6 +42,7 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({
   currentUser,
   onUpdateUser,
   onOpenAuthModal,
+  onLogout,
 }) => {
   const [activeTab, setActiveTab] = useState<'profile' | 'voice'>('profile');
   const [name, setName] = useState(currentUser.name);
@@ -351,22 +354,40 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-4 bg-[#2b2d31] border-t border-[#35373c] flex justify-end gap-3">
-          <button
-            onClick={() => {
-              stopMicTest();
-              onClose();
-            }}
-            className="px-4 py-2 rounded-lg text-zinc-300 hover:bg-[#35373c]"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            className="px-6 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition-all shadow-lg shadow-indigo-600/20"
-          >
-            Save Changes
-          </button>
+        <div className="p-4 bg-[#2b2d31] border-t border-[#35373c] flex items-center justify-between">
+          <div>
+            {onLogout && (
+              <button
+                type="button"
+                onClick={() => {
+                  stopMicTest();
+                  onClose();
+                  onLogout();
+                }}
+                className="px-3.5 py-2 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/20 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>Log Out</span>
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                stopMicTest();
+                onClose();
+              }}
+              className="px-4 py-2 rounded-lg text-zinc-300 hover:bg-[#35373c] text-xs font-medium cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              className="px-6 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition-all shadow-lg shadow-indigo-600/20 text-xs cursor-pointer"
+            >
+              Save Changes
+            </button>
+          </div>
         </div>
       </div>
     </div>

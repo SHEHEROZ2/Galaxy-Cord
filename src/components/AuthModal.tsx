@@ -65,36 +65,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [copiedTag, setCopiedTag] = useState(false);
 
-  // Available community accounts from Neon Postgres
-  const [availableAccounts, setAvailableAccounts] = useState<
-    Array<{ id: string; name: string; tag: string; role: string; avatar?: string }>
-  >([
-    { id: 'user-elena', name: 'Elena Rostova', tag: '1001', role: 'Online / Voice host' },
-    { id: 'user-marcus', name: 'Marcus Vance', tag: '2048', role: 'VPS Server Host' },
-    { id: 'user-cybernova', name: 'CyberNova', tag: '7777', role: 'Gamer / Streamer' },
-  ]);
 
-  React.useEffect(() => {
-    fetch('/api/members')
-      .then((res) => res.json())
-      .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          const list = data
-            .filter((a: any) => a.name.toLowerCase() !== 'galaxy505g' && a.id !== 'user-galaxy505g')
-            .map((a: any) => ({
-              id: a.id,
-              name: a.name,
-              tag: a.tag,
-              role: a.role === 'moderator' ? 'Server Moderator' : (a.role === 'admin' ? 'Admin' : 'Community Member'),
-              avatar: a.avatar,
-            }));
-          if (list.length > 0) {
-            setAvailableAccounts(list);
-          }
-        }
-      })
-      .catch(() => {});
-  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -254,53 +225,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
-  // Quick 1-click login for test demo accounts
-  const handleQuickDemoLogin = async (identifier: string) => {
-    setError(null);
-    setLoading(true);
-    try {
-      let loggedInUser: User | null = null;
-      try {
-        const res = await fetch('/api/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            identifier,
-            password: 'password123',
-          }),
-        });
-        const text = await res.text();
-        const data = text ? JSON.parse(text) : null;
-        if (res.ok && data?.user) {
-          loggedInUser = data.user;
-        }
-      } catch {
-        // Fallback
-      }
 
-      if (!loggedInUser) {
-        const localAuth = verifyLocalLogin(identifier, 'password123');
-        if (localAuth.success && localAuth.user) {
-          loggedInUser = localAuth.user;
-        }
-      }
-
-      if (!loggedInUser) {
-        throw new Error('Demo login failed');
-      }
-
-      setSuccessMsg(`Switched to ${loggedInUser.name}#${loggedInUser.tag || '0000'}!`);
-      localStorage.setItem('nexus_user', JSON.stringify(loggedInUser));
-      onAuthSuccess(loggedInUser);
-      setTimeout(() => {
-        onClose();
-      }, 600);
-    } catch (err: any) {
-      setError(err.message || 'Demo login failed');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const copyUserTag = () => {
     const fullTag = `${currentUser.name}#${currentUser.tag || '0000'}`;
@@ -552,48 +477,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <LogIn className="w-4 h-4" />
                   <span>Log In</span>
                 </button>
-              </form>
-
-              {/* Quick Demo Switcher */}
-              <div className="pt-2 border-t border-[#232428]">
-                <div className="flex items-center gap-1.5 text-zinc-400 font-bold text-[11px] uppercase tracking-wider mb-2">
-                  <Zap className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Quick Demo Account Logins (1-Click)</span>
-                </div>
-                <div className="grid grid-cols-1 gap-1.5 max-h-52 overflow-y-auto pr-0.5">
-                  {availableAccounts.map((acc) => (
-                    <button
-                      key={acc.id}
-                      type="button"
-                      onClick={() => handleQuickDemoLogin(acc.id)}
-                      disabled={loading}
-                      className="w-full flex items-center justify-between p-2 rounded-lg bg-[#2b2d31] hover:bg-[#35373c] border border-[#383a40] text-left transition-colors cursor-pointer group"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        {acc.avatar ? (
-                          <img src={acc.avatar} alt={acc.name} className="w-7 h-7 rounded-full object-cover shrink-0" />
-                        ) : (
-                          <div className="w-7 h-7 rounded-full bg-indigo-600/30 text-indigo-300 font-bold flex items-center justify-center text-xs shrink-0">
-                            {acc.name[0]}
-                          </div>
-                        )}
-                        <div className="min-w-0 truncate">
-                          <div className="font-bold text-white text-xs group-hover:text-indigo-300 truncate">
-                            {acc.name}
-                            <span className="text-zinc-500 text-[10px] ml-1">#{acc.tag}</span>
-                          </div>
-                          <div className="text-[10px] text-zinc-400 truncate">{acc.role}</div>
-                        </div>
-                      </div>
-                      <span className="text-[10px] font-bold text-indigo-400 group-hover:text-indigo-300 bg-indigo-950/60 px-2 py-0.5 rounded border border-indigo-700/40 shrink-0">
-                        Switch
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
+                </form>
             </div>
-
           )}
 
           {/* PROFILE / LOGGED IN TAB */}
@@ -651,7 +536,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   className="w-full py-2.5 px-4 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg font-bold transition-colors flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <LogOut className="w-4 h-4" />
-                  <span>Log Out (Switch to Guest)</span>
+                  <span>Log Out</span>
                 </button>
               </div>
             </div>

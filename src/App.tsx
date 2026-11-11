@@ -6,6 +6,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AdminPanelModal } from './components/AdminPanelModal';
 import { AuthModal } from './components/AuthModal';
+import { AuthPage } from './components/AuthPage';
 import { ChannelSidebar } from './components/ChannelSidebar';
 import { ChatArea } from './components/ChatArea';
 import { CreateChannelModal } from './components/CreateChannelModal';
@@ -26,35 +27,28 @@ import { Channel, DirectMessage, FriendUser, Message, MessageAttachment, Server,
 import { getInitialServers, ALL_ONLINE_SERVERS } from './utils/onlineServers';
 import { Compass, Hash, Radio, Shield, Tv, Users, Volume2 } from 'lucide-react';
 
-// Default guest identity generator
-function getInitialUser(): User {
+// User account retriever - strictly requires authentic login/registration
+function getInitialUser(): User | null {
   const saved = localStorage.getItem('nexus_user');
   if (saved) {
     try {
       const parsed = JSON.parse(saved);
-      if (!parsed.tag) {
-        parsed.tag = Math.floor(1000 + Math.random() * 9000).toString();
-        localStorage.setItem('nexus_user', JSON.stringify(parsed));
+      // Only keep registered accounts or the superadmin, not legacy auto-generated guests
+      if (
+        parsed &&
+        parsed.id &&
+        parsed.name &&
+        (parsed.isRegistered || parsed.email || parsed.role === 'admin' || parsed.name.toLowerCase() === 'galaxy505g')
+      ) {
+        if (!parsed.tag) {
+          parsed.tag = Math.floor(1000 + Math.random() * 9000).toString();
+          localStorage.setItem('nexus_user', JSON.stringify(parsed));
+        }
+        return parsed;
       }
-      return parsed;
     } catch (e) {}
   }
-  const id = 'usr-' + Math.random().toString(36).substring(2, 8);
-  const randomNames = ['EchoPilot', 'NeonCipher', 'Vortex', 'CyberNova', 'PixelPulse', 'QuantumSky'];
-  const name = randomNames[Math.floor(Math.random() * randomNames.length)];
-  const tag = Math.floor(1000 + Math.random() * 9000).toString();
-  const user: User = {
-    id,
-    name,
-    tag,
-    avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${id}`,
-    status: 'online',
-    customStatus: 'Exploring Galaxy Cord',
-    role: 'member',
-    isRegistered: false,
-  };
-  localStorage.setItem('nexus_user', JSON.stringify(user));
-  return user;
+  return null;
 }
 
 // Built-in Default Community Hub Server
@@ -84,7 +78,7 @@ function getDefaultServer(): Server {
 }
 
 export default function App() {
-  const [currentUser, setCurrentUser] = useState<User>(getInitialUser);
+  const [currentUser, setCurrentUser] = useState<User | null>(getInitialUser);
   const [servers, setServers] = useState<Server[]>(getInitialServers);
 
   const [activeServerId, setActiveServerId] = useState<string>(() => {
@@ -160,7 +154,7 @@ export default function App() {
   ];
 
   const DEFAULT_MEMBERS: User[] = [
-    currentUser,
+    ...(currentUser ? [currentUser] : []),
     {
       id: 'sys-nexus',
       name: 'Nexus Bot',
@@ -294,7 +288,7 @@ export default function App() {
 
   // Fetch initial friends list via REST
   useEffect(() => {
-    if (currentUser.id) {
+    if (currentUser?.id) {
       fetch(`/api/friends?userId=${encodeURIComponent(currentUser.id)}`)
         .then((res) => res.json())
         .then((data) => {
@@ -302,10 +296,11 @@ export default function App() {
         })
         .catch((err) => console.warn('Could not load initial friends:', err));
     }
-  }, [currentUser.id]);
+  }, [currentUser?.id]);
 
   // Fetch all registered community members from Neon database
   useEffect(() => {
+    if (!currentUser) return;
     fetch('/api/members')
       .then((res) => res.json())
       .then((data) => {
@@ -327,7 +322,7 @@ export default function App() {
         }
       })
       .catch((err) => console.warn('Could not load members from Neon:', err));
-  }, [currentUser.id]);
+  }, [currentUser?.id]);
 
   // Fetch all online & registered servers from Neon database
   useEffect(() => {
@@ -384,6 +379,7 @@ export default function App() {
 
   // Connect WebSocket to active server or default community hub
   useEffect(() => {
+    if (!currentUser) return;
     const targetUrl =
       activeServerId === '@me'
         ? (servers.find((s) => s.id === 'nexus-global-community')?.url || servers[0]?.url)
@@ -838,7 +834,7 @@ export default function App() {
       unsubDmTyping();
       unsubDmHistory();
     };
-  }, [activeServerId, currentUser.id]);
+  }, [activeServerId, currentUser?.id]);
 
   // Fetch persisted messages from server API whenever server or channel changes
   useEffect(() => {
@@ -959,13 +955,15 @@ export default function App() {
   };
 
   const handleUpdateUser = (updates: Partial<User>) => {
-    const updated = { ...currentUser, ...updates };
+    if (!currentUser) return;
+    const updated: User = { ...currentUser, ...updates };
     setCurrentUser(updated);
     localStorage.setItem('nexus_user', JSON.stringify(updated));
     socketService.updateUserProfile(updates);
   };
 
   const handleSendMessage = (text: string, attachments: MessageAttachment[] = []) => {
+    if (!currentUser) return;
     const msgId = 'm-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
     const newMsg: Message = {
       id: msgId,
@@ -998,6 +996,7 @@ export default function App() {
   };
 
   const handleToggleReaction = (messageId: string, emoji: string) => {
+    if (!currentUser) return;
     setMessages((prev) =>
       prev.map((m) => {
         if (m.id !== messageId) return m;
@@ -1108,6 +1107,7 @@ export default function App() {
 
   const handleSelectDmUser = (friendId: string) => {
     setActiveServerId('@me');
+    if (!currentUser) return;
     setActiveDmUserId(friendId);
     setMobileView('chat');
     setForceVoiceStage(false);
@@ -1128,7 +1128,7 @@ export default function App() {
   };
 
   const handleSendDm = (text: string, attachments: MessageAttachment[] = []) => {
-    if (!activeDmUserId) return;
+    if (!currentUser || !activeDmUserId) return;
     const newDm: DirectMessage = {
       id: 'dm-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
       conversationId: 'dm-conv',
@@ -1156,6 +1156,7 @@ export default function App() {
   };
 
   const handleSendFriendRequest = (targetTag: string) => {
+    if (!currentUser) return;
     socketService.sendFriendRequest(targetTag);
     fetch('/api/friends/request', {
       method: 'POST',
@@ -1175,6 +1176,7 @@ export default function App() {
   };
 
   const handleRespondFriendRequest = (friendId: string, action: 'accept' | 'decline') => {
+    if (!currentUser) return;
     socketService.respondFriendRequest(friendId, action);
     fetch('/api/friends/respond', {
       method: 'POST',
@@ -1197,6 +1199,7 @@ export default function App() {
   };
 
   const handleRemoveFriend = (friendId: string) => {
+    if (!currentUser) return;
     socketService.removeFriend(friendId);
     fetch('/api/friends', {
       method: 'DELETE',
@@ -1228,13 +1231,14 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    socketService.disconnect();
     localStorage.removeItem('nexus_user');
-    const newUser = getInitialUser();
-    setCurrentUser(newUser);
+    setCurrentUser(null);
     setFriends([]);
     setDmConversations({});
     setActiveDmUserId(null);
-    socketService.connect(activeServer.url, newUser, activeServer.id);
+    setIsUserSettingsOpen(false);
+    setIsAuthModalOpen(false);
   };
 
   const handleStartVoiceCallWithFriend = (_friendId: string) => {
@@ -1247,6 +1251,17 @@ export default function App() {
     handleJoinVoice(voiceChan.id);
     setMobileView('chat');
   };
+
+  // If user is not authenticated, display the Sign In / Sign Up page
+  if (!currentUser) {
+    return (
+      <AuthPage
+        onAuthSuccess={(user) => {
+          setCurrentUser(user);
+        }}
+      />
+    );
+  }
 
   // Check if active channel is voice or if user wants to view voice stage
   const isViewingVoiceStage = activeServerId !== '@me' && (activeChannel.type === 'voice' || forceVoiceStage);
@@ -1594,6 +1609,7 @@ export default function App() {
         currentUser={currentUser}
         onUpdateUser={handleUpdateUser}
         onOpenAuthModal={() => setIsAuthModalOpen(true)}
+        onLogout={handleLogout}
       />
 
       <AuthModal
