@@ -42,6 +42,63 @@ function generateUserTag(): string {
   return Math.floor(1000 + Math.random() * 9000).toString();
 }
 
+async function hashPasswordWorker(password: string): Promise<string> {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const saltHex = Array.from(salt).map(b => b.toString(16).padStart(2, "0")).join("");
+  const enc = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(password),
+    { name: "PBKDF2" },
+    false,
+    ["deriveBits"]
+  );
+  const derived = await crypto.subtle.deriveBits(
+    {
+      name: "PBKDF2",
+      salt: salt,
+      iterations: 50000,
+      hash: "SHA-256"
+    },
+    keyMaterial,
+    256
+  );
+  const hashHex = Array.from(new Uint8Array(derived)).map(b => b.toString(16).padStart(2, "0")).join("");
+  return `${saltHex}:${hashHex}`;
+}
+
+async function verifyPasswordWorker(password: string, stored: string): Promise<boolean> {
+  if (!stored || !password) return false;
+  if (!stored.includes(":")) {
+    return stored === password;
+  }
+  const [saltHex, expectedHashHex] = stored.split(":");
+  if (!saltHex || !expectedHashHex) return false;
+  const match = saltHex.match(/.{1,2}/g);
+  if (!match) return false;
+  const salt = new Uint8Array(match.map(byte => parseInt(byte, 16)));
+  const enc = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(password),
+    { name: "PBKDF2" },
+    false,
+    ["deriveBits"]
+  );
+  const derived = await crypto.subtle.deriveBits(
+    {
+      name: "PBKDF2",
+      salt: salt,
+      iterations: 50000,
+      hash: "SHA-256"
+    },
+    keyMaterial,
+    256
+  );
+  const derivedHex = Array.from(new Uint8Array(derived)).map(b => b.toString(16).padStart(2, "0")).join("");
+  return derivedHex === expectedHashHex;
+}
+
 function getDefaultServerInfo(host: string, isHttps = true) {
   const wsProto = isHttps ? 'wss' : 'ws';
   return {
@@ -1179,13 +1236,14 @@ export default {
         `;
 
         if (!rows || rows.length === 0) {
-          return jsonResponse({ error: 'Account not found. Please check your credentials or create an account.' }, 401);
+          return jsonResponse({ error: 'Invalid username, email, or password.' }, 401);
         }
 
         const account = rows[0];
+        const isPasswordValid = account.password ? await verifyPasswordWorker(password, account.password) : false;
 
-        if (account.password && account.password !== password && password !== 'password123') {
-          return jsonResponse({ error: 'Incorrect password' }, 401);
+        if (!isPasswordValid) {
+          return jsonResponse({ error: 'Invalid username, email, or password.' }, 401);
         }
 
         if (account.is_banned) {
@@ -1217,8 +1275,10 @@ export default {
           timedOutUntil: account.timed_out_until ? Number(account.timed_out_until) : null,
         };
 
+        const token = 'sess_' + crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
         return jsonResponse({
           success: true,
+          token,
           user: safeUser,
         });
       } catch (err: any) {
@@ -1236,8 +1296,8 @@ export default {
         if (!username || username.trim().length < 2) {
           return jsonResponse({ error: 'Username must be at least 2 characters long' }, 400);
         }
-        if (!password || password.length < 4) {
-          return jsonResponse({ error: 'Password must be at least 4 characters long' }, 400);
+        if (!password || password.length < 8) {
+          return jsonResponse({ error: 'Password must be at least 8 characters long for security' }, 400);
         }
 
         const cleanUsername = username.trim();
@@ -1258,12 +1318,14 @@ export default {
         const userBio = bio || 'Galaxy Cord user';
         const role = cleanUsername.toLowerCase() === 'galaxy505g' ? 'admin' : 'member';
         const now = Date.now();
+        const hashedPassword = await hashPasswordWorker(password);
+        const token = 'sess_' + crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
 
         await sql`
           INSERT INTO galaxy_accounts (
             id, username, tag, email, password, avatar, bio, status, custom_status, role, created_at, is_banned
           ) VALUES (
-            ${accountId}, ${cleanUsername}, ${tag}, ${cleanEmail || null}, ${password},
+            ${accountId}, ${cleanUsername}, ${tag}, ${cleanEmail || null}, ${hashedPassword},
             ${userAvatar}, ${userBio}, 'online', 'Exploring Galaxy Cord ✨', ${role}, ${now}, false
           )
           ON CONFLICT (id) DO UPDATE SET
@@ -1278,6 +1340,7 @@ export default {
 
         return jsonResponse({
           success: true,
+          token,
           user: {
             id: accountId,
             name: cleanUsername,

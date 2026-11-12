@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { User } from '../types';
-import { verifyLocalLogin, saveLocalAccount, LocalStoredAccount } from '../utils/localAccounts';
+import { setAuthToken, setSavedUser } from '../utils/localAccounts';
 import {
   Check,
   Eye,
@@ -66,49 +66,35 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
 
     setLoading(true);
     try {
-      let user: User | null = null;
-      let errorMsg: string | null = null;
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identifier: cleanId,
+          password: loginPassword,
+        }),
+      });
 
+      const text = await res.text();
+      let data: any = null;
       try {
-        const res = await fetch('/api/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            identifier: cleanId,
-            password: loginPassword,
-          }),
-        });
+        data = text ? JSON.parse(text) : null;
+      } catch {}
 
-        const text = await res.text();
-        const data = text ? JSON.parse(text) : null;
-        if (res.ok && data?.user) {
-          user = data.user;
-        } else if (data?.error) {
-          errorMsg = data.error;
-        }
-      } catch {
-        // Fallback to local store verification
+      if (!res.ok || !data?.user) {
+        throw new Error(data?.error || 'Invalid username, email, or password.');
       }
 
-      if (!user) {
-        const localRes = verifyLocalLogin(cleanId, loginPassword);
-        if (localRes.success && localRes.user) {
-          user = localRes.user;
-          errorMsg = null;
-        } else if (!errorMsg) {
-          errorMsg = localRes.error || 'Invalid credentials. Please verify username and password.';
-        }
-      }
-
-      if (!user) {
-        throw new Error(errorMsg || 'Login failed. Please check your username and password.');
-      }
-
+      const user = data.user;
       user.isRegistered = true;
-      localStorage.setItem('nexus_user', JSON.stringify(user));
+      if (data.token) {
+        setAuthToken(data.token);
+      }
+      setSavedUser(user);
+
       setSuccess(`Welcome back, ${user.name}! Opening Galaxy Cord...`);
       setTimeout(() => {
-        onAuthSuccess(user!);
+        onAuthSuccess(user);
       }, 500);
     } catch (err: any) {
       setError(err.message || 'Login failed');
@@ -129,78 +115,49 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
       setError('Username must be at least 2 characters');
       return;
     }
-    if (!regPassword || regPassword.length < 4) {
-      setError('Password must be at least 4 characters');
+    if (cleanName.length > 32) {
+      setError('Username cannot exceed 32 characters');
+      return;
+    }
+    if (!regPassword || regPassword.length < 8) {
+      setError('Password must be at least 8 characters long for security');
       return;
     }
 
     setLoading(true);
     try {
-      let user: User | null = null;
-      let errorMsg: string | null = null;
-
-      try {
-        const res = await fetch('/api/auth/register', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            username: cleanName,
-            email: cleanEmail,
-            password: regPassword,
-            avatar: regAvatar,
-            bio: regBio.trim(),
-          }),
-        });
-
-        const text = await res.text();
-        const data = text ? JSON.parse(text) : null;
-        if (res.ok && data?.user) {
-          user = data.user;
-        } else if (data?.error) {
-          errorMsg = data.error;
-        }
-      } catch {
-        // Fallback
-      }
-
-      if (!user && !errorMsg) {
-        const randomTag = Math.floor(1000 + Math.random() * 9000).toString();
-        const role = cleanName.toLowerCase() === 'galaxy505g' ? 'admin' : 'member';
-        const newLocalAcc: LocalStoredAccount = {
-          id: 'acc-' + Date.now().toString(36),
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           username: cleanName,
-          tag: randomTag,
           email: cleanEmail,
           password: regPassword,
-          avatar: regAvatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${cleanName}`,
+          avatar: regAvatar,
           bio: regBio.trim(),
-          role,
-          status: 'online',
-          createdAt: Date.now(),
-        };
-        saveLocalAccount(newLocalAcc);
-        user = {
-          id: newLocalAcc.id,
-          name: newLocalAcc.username,
-          tag: newLocalAcc.tag,
-          email: newLocalAcc.email,
-          avatar: newLocalAcc.avatar,
-          bio: newLocalAcc.bio,
-          status: 'online',
-          role: newLocalAcc.role,
-          isRegistered: true,
-        };
+        }),
+      });
+
+      const text = await res.text();
+      let data: any = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {}
+
+      if (!res.ok || !data?.user) {
+        throw new Error(data?.error || 'Failed to create database account');
       }
 
-      if (!user) {
-        throw new Error(errorMsg || 'Failed to create account.');
-      }
-
+      const user = data.user;
       user.isRegistered = true;
-      localStorage.setItem('nexus_user', JSON.stringify(user));
-      setSuccess(`Account created! Welcome to Galaxy Cord, ${user.name}#${user.tag || '0000'}!`);
+      if (data.token) {
+        setAuthToken(data.token);
+      }
+      setSavedUser(user);
+
+      setSuccess(`Account registered in database! Welcome to Galaxy Cord, ${user.name}#${user.tag || '0000'}!`);
       setTimeout(() => {
-        onAuthSuccess(user!);
+        onAuthSuccess(user);
       }, 500);
     } catch (err: any) {
       setError(err.message || 'Failed to register account');
@@ -219,8 +176,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
       <div className="w-full max-w-md bg-[#16171d]/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden z-10 flex flex-col">
         {/* Brand Header */}
         <div className="p-6 text-center border-b border-white/5 relative">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-600/30 mb-3">
-            <span className="text-2xl">🌌</span>
+          <div className="inline-flex items-center justify-center mb-3">
+            <img
+              src="/assets/aistudio/logo_82ff70ea.png"
+              alt="Galaxy Cord Logo"
+              className="w-16 h-16 object-contain drop-shadow-[0_4px_24px_rgba(139,92,246,0.5)] transition-transform hover:scale-105"
+            />
           </div>
           <h1 className="text-2xl font-black tracking-tight text-white flex items-center justify-center gap-2">
             Galaxy Cord
@@ -404,7 +365,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                     type={showRegPassword ? 'text' : 'password'}
                     value={regPassword}
                     onChange={(e) => setRegPassword(e.target.value)}
-                    placeholder="Minimum 4 characters"
+                    placeholder="Minimum 8 characters"
                     required
                     className="w-full bg-[#0d0e12] border border-white/10 rounded-xl pl-10 pr-10 py-2.5 text-sm text-white placeholder-zinc-500 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all font-medium"
                   />

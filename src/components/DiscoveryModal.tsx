@@ -168,8 +168,12 @@ export const DiscoveryModal: React.FC<DiscoveryModalProps> = ({
                     <div>
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-[#1e1f22] to-[#383a40] border border-[#44464d] flex items-center justify-center text-2xl shadow-inner shrink-0 group-hover:scale-105 transition-transform">
-                            {srv.icon || '🌌'}
+                          <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-[#1e1f22] to-[#383a40] border border-[#44464d] flex items-center justify-center text-2xl shadow-inner shrink-0 group-hover:scale-105 transition-transform overflow-hidden p-1.5">
+                            {srv.icon && (srv.icon.startsWith('/') || srv.icon.startsWith('http')) ? (
+                              <img src={srv.icon} alt={srv.name} className="w-full h-full object-contain" />
+                            ) : (
+                              <span>{srv.icon || '🌌'}</span>
+                            )}
                           </div>
                           <div className="min-w-0">
                             <div className="font-bold text-white text-sm flex items-center gap-1.5 truncate">

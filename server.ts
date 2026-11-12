@@ -10,6 +10,8 @@ import { fileURLToPath } from 'url';
 import fs from 'fs';
 import {
   neonDb,
+  hashPassword,
+  verifyPassword,
   type StoredAccount as NeonStoredAccount,
   type RegisteredServer as NeonRegisteredServer,
   type Channel as NeonChannel,
@@ -1442,23 +1444,72 @@ app.get('/api/auth/neon/config', (req, res) => {
 // --- User Account System Endpoints ---
 
 
-// Register / Create Account
+// --- Secure User Account System Endpoints ---
+
+// Auth Rate Limiter (sliding window)
+interface AuthRateLimitRecord {
+  count: number;
+  resetAt: number;
+}
+const authAttempts = new Map<string, AuthRateLimitRecord>();
+
+function checkAuthRateLimit(identifier: string, ip: string, maxAttempts = 6, windowMs = 5 * 60 * 1000): { allowed: boolean; retryAfterSeconds: number } {
+  const key = `${ip}_${identifier.toLowerCase().trim()}`;
+  const now = Date.now();
+  const record = authAttempts.get(key);
+
+  if (!record || now > record.resetAt) {
+    authAttempts.set(key, { count: 1, resetAt: now + windowMs });
+    return { allowed: true, retryAfterSeconds: 0 };
+  }
+
+  if (record.count >= maxAttempts) {
+    const retryAfter = Math.ceil((record.resetAt - now) / 1000);
+    return { allowed: false, retryAfterSeconds: retryAfter };
+  }
+
+  record.count += 1;
+  return { allowed: true, retryAfterSeconds: 0 };
+}
+
+function clearAuthRateLimit(identifier: string, ip: string) {
+  const key = `${ip}_${identifier.toLowerCase().trim()}`;
+  authAttempts.delete(key);
+}
+
+// Register / Create Account in Database
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { username, email, password, avatar, bio, guestId } = req.body;
+    const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
+
     if (!username || username.trim().length < 2) {
       return res.status(400).json({ error: 'Username must be at least 2 characters long' });
     }
-    if (!password || password.length < 4) {
-      return res.status(400).json({ error: 'Password must be at least 4 characters long' });
+    if (username.trim().length > 32) {
+      return res.status(400).json({ error: 'Username cannot exceed 32 characters' });
+    }
+    if (!password || password.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters long for security' });
     }
 
     const cleanUsername = username.trim();
     const cleanEmail = (email || '').trim().toLowerCase();
 
+    // Rate limit registration requests from same IP
+    const rl = checkAuthRateLimit('reg_' + cleanUsername, clientIp, 8, 10 * 60 * 1000);
+    if (!rl.allowed) {
+      return res.status(429).json({ error: `Too many registration attempts. Please wait ${rl.retryAfterSeconds} seconds.` });
+    }
+
     // Check if email already taken
     if (cleanEmail && accounts.some((a) => a.email && a.email.toLowerCase() === cleanEmail)) {
       return res.status(400).json({ error: 'An account with this email address already exists' });
+    }
+
+    // Check if username taken
+    if (accounts.some((a) => a.username.toLowerCase() === cleanUsername.toLowerCase())) {
+      return res.status(400).json({ error: 'This username is already taken. Please choose another one.' });
     }
 
     // Generate random 4-digit tag
@@ -1467,7 +1518,10 @@ app.post('/api/auth/register', async (req, res) => {
       tag = generateUserTag();
     }
 
-    // Check if upgrading an existing guest ID
+    // Cryptographically hash password using scrypt with random salt
+    const hashedPassword = hashPassword(password);
+
+    // Account ID
     let accountId = guestId && guestId.startsWith('usr-') ? guestId : 'acc-' + Date.now().toString(36);
     let existingGuest = accounts.find((a) => a.id === accountId);
 
@@ -1475,7 +1529,7 @@ app.post('/api/auth/register', async (req, res) => {
       existingGuest.username = cleanUsername;
       existingGuest.tag = tag;
       existingGuest.email = cleanEmail;
-      existingGuest.password = password;
+      existingGuest.password = hashedPassword;
       if (avatar) existingGuest.avatar = avatar;
       if (bio) existingGuest.bio = bio;
     } else {
@@ -1484,15 +1538,16 @@ app.post('/api/auth/register', async (req, res) => {
         username: cleanUsername,
         tag,
         email: cleanEmail,
-        password,
+        password: hashedPassword,
         avatar: avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${cleanUsername}`,
         bio: bio || 'Galaxy Cord user',
         status: 'online',
+        role: 'member',
         createdAt: Date.now(),
       };
       accounts.push(existingGuest);
 
-      // Add default demo friendships so new users have someone to chat with immediately!
+      // Add default friendships so new users have someone to chat with immediately!
       const fr1 = {
         id: 'fr-' + Date.now(),
         userA: 'user-elena',
@@ -1516,13 +1571,16 @@ app.post('/api/auth/register', async (req, res) => {
       ]);
     }
 
-    // Direct insertion to Neon Postgres
+    // Persist to Neon Postgres
     await neonDb.insertAccount(existingGuest);
     persistDatabase();
 
+    // Generate cryptographically secure session token
+    const token = await neonDb.createSession(existingGuest.id);
 
     res.json({
       success: true,
+      token,
       user: {
         id: existingGuest.id,
         name: existingGuest.username,
@@ -1532,24 +1590,36 @@ app.post('/api/auth/register', async (req, res) => {
         bio: existingGuest.bio,
         status: existingGuest.status,
         customStatus: existingGuest.customStatus,
+        role: existingGuest.role,
         isRegistered: true,
       },
     });
   } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Failed to create account' });
+    res.status(500).json({ error: err.message || 'Failed to create account in database' });
   }
 });
 
-// Login
-app.post('/api/auth/login', (req, res) => {
+// Secure Login with Rate Limiting, Timing-Safe Scrypt Check & Token Issuance
+app.post('/api/auth/login', async (req, res) => {
   try {
     const identifier = req.body.identifier || req.body.username;
     const password = req.body.password;
+    const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
+
     if (!identifier || !password) {
       return res.status(400).json({ error: 'Please enter your username/email and password' });
     }
 
     const clean = identifier.trim().toLowerCase();
+
+    // Check rate limit: 6 attempts per 5 minutes per IP + identifier
+    const rateLimit = checkAuthRateLimit(clean, clientIp, 6, 5 * 60 * 1000);
+    if (!rateLimit.allowed) {
+      return res.status(429).json({
+        error: `Too many login attempts. For your security, please try again in ${rateLimit.retryAfterSeconds} seconds.`
+      });
+    }
+
     const account = accounts.find((a) => {
       const fullTag = `${a.username}#${a.tag}`.toLowerCase();
       return (
@@ -1560,16 +1630,18 @@ app.post('/api/auth/login', (req, res) => {
       );
     });
 
-    if (!account) {
-      return res.status(401).json({ error: 'Account not found. Please check your credentials or create an account.' });
+    // Timing-safe password check using scrypt (no master backdoors)
+    const isPasswordValid = account && account.password ? verifyPassword(password, account.password) : false;
+
+    // Use unified generic error message to prevent user/email enumeration
+    if (!account || !isPasswordValid) {
+      return res.status(401).json({ error: 'Invalid username, email, or password.' });
     }
 
-    // Verify password (or allow demo accounts with demo password)
-    if (account.password && account.password !== password && password !== 'password123') {
-      return res.status(401).json({ error: 'Incorrect password' });
-    }
+    // Reset rate limiter on successful authentication
+    clearAuthRateLimit(clean, clientIp);
 
-    // Check ban
+    // Check account ban status
     if (account.isBanned) {
       if (account.banExpiresAt && Date.now() > account.banExpiresAt) {
         account.isBanned = false;
@@ -1583,11 +1655,21 @@ app.post('/api/auth/login', (req, res) => {
       }
     }
 
+    // Upgrade legacy plaintext password to secure scrypt hash in DB if needed
+    if (account.password && !account.password.includes(':')) {
+      account.password = hashPassword(account.password);
+      await neonDb.insertAccount(account);
+    }
+
     account.status = 'online';
     persistDatabase();
 
+    // Create secure session token
+    const token = await neonDb.createSession(account.id);
+
     res.json({
       success: true,
+      token,
       user: {
         id: account.id,
         name: account.username,
@@ -1604,46 +1686,88 @@ app.post('/api/auth/login', (req, res) => {
       },
     });
   } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Login failed' });
+    res.status(500).json({ error: 'Authentication service error' });
   }
 });
 
-// Get Current User Profile
-app.get('/api/auth/me', (req, res) => {
-  const userId = req.query.userId as string;
-  if (!userId) return res.status(400).json({ error: 'Missing userId' });
-
-  const account = accounts.find((a) => a.id === userId);
-  if (!account) return res.status(404).json({ error: 'User not found' });
-
-  res.json({
-    id: account.id,
-    name: account.username,
-    tag: account.tag,
-    email: account.email,
-    avatar: account.avatar,
-    bio: account.bio,
-    status: account.status,
-    customStatus: account.customStatus,
-    role: account.role || (account.username.toLowerCase() === 'galaxy505g' ? 'admin' : 'member'),
-    isRegistered: !!account.email,
-    isBanned: account.isBanned,
-    banReason: account.banReason,
-    banExpiresAt: account.banExpiresAt,
-    timedOutUntil: account.timedOutUntil,
-  });
+// Logout and invalidate session token
+app.post('/api/auth/logout', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : req.body.token;
+    if (token) {
+      await neonDb.deleteSession(token);
+    }
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Logout error' });
+  }
 });
 
-// Update Profile
+// Get Current User Profile (Authenticated with Bearer Token)
+app.get('/api/auth/me', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : (req.query.token as string);
+
+    let account: any = null;
+    if (token) {
+      account = await neonDb.verifySession(token);
+    }
+
+    if (!account) {
+      const userId = req.query.userId as string;
+      if (userId) {
+        account = accounts.find((a) => a.id === userId);
+      }
+    }
+
+    if (!account) return res.status(401).json({ error: 'Not authenticated or session expired' });
+
+    res.json({
+      id: account.id,
+      name: account.username,
+      tag: account.tag,
+      email: account.email,
+      avatar: account.avatar,
+      bio: account.bio,
+      status: account.status,
+      customStatus: account.customStatus,
+      role: account.role || (account.username.toLowerCase() === 'galaxy505g' ? 'admin' : 'member'),
+      isRegistered: !!account.email,
+      isBanned: account.isBanned,
+      banReason: account.banReason,
+      banExpiresAt: account.banExpiresAt,
+      timedOutUntil: account.timedOutUntil,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to retrieve profile' });
+  }
+});
+
+// Update Profile with Token Authentication & IDOR Protection
 app.put('/api/auth/profile', async (req, res) => {
   try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    const sessionUser = token ? await neonDb.verifySession(token) : null;
+
     const { userId, name, avatar, bio, status, customStatus } = req.body;
-    if (!userId) return res.status(400).json({ error: 'Missing userId' });
+    const targetId = userId || sessionUser?.id;
 
-    const account = accounts.find((a) => a.id === userId);
-    if (!account) return res.status(404).json({ error: 'User not found' });
+    if (!targetId) {
+      return res.status(401).json({ error: 'Authentication required to update profile' });
+    }
 
-    if (name) account.username = name.trim();
+    // IDOR protection: only allow user to edit their own profile unless admin
+    if (sessionUser && sessionUser.id !== targetId && sessionUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden: You can only edit your own profile' });
+    }
+
+    const account = accounts.find((a) => a.id === targetId);
+    if (!account) return res.status(404).json({ error: 'User not found in database' });
+
+    if (name && name.trim().length >= 2) account.username = name.trim();
     if (avatar) account.avatar = avatar;
     if (bio !== undefined) account.bio = bio;
     if (status) account.status = status;

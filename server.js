@@ -8,7 +8,9 @@ import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
 import {
-  neonDb
+  neonDb,
+  hashPassword,
+  verifyPassword
 } from "./server-db.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1143,31 +1145,63 @@ app.get("/api/auth/neon/config", (req, res) => {
     postgresConfigured: !!process.env.DATABASE_URL
   });
 });
+const authAttempts = /* @__PURE__ */ new Map();
+function checkAuthRateLimit(identifier, ip, maxAttempts = 6, windowMs = 5 * 60 * 1e3) {
+  const key = `${ip}_${identifier.toLowerCase().trim()}`;
+  const now = Date.now();
+  const record = authAttempts.get(key);
+  if (!record || now > record.resetAt) {
+    authAttempts.set(key, { count: 1, resetAt: now + windowMs });
+    return { allowed: true, retryAfterSeconds: 0 };
+  }
+  if (record.count >= maxAttempts) {
+    const retryAfter = Math.ceil((record.resetAt - now) / 1e3);
+    return { allowed: false, retryAfterSeconds: retryAfter };
+  }
+  record.count += 1;
+  return { allowed: true, retryAfterSeconds: 0 };
+}
+function clearAuthRateLimit(identifier, ip) {
+  const key = `${ip}_${identifier.toLowerCase().trim()}`;
+  authAttempts.delete(key);
+}
 app.post("/api/auth/register", async (req, res) => {
   try {
     const { username, email, password, avatar, bio, guestId } = req.body;
+    const clientIp = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
     if (!username || username.trim().length < 2) {
       return res.status(400).json({ error: "Username must be at least 2 characters long" });
     }
-    if (!password || password.length < 4) {
-      return res.status(400).json({ error: "Password must be at least 4 characters long" });
+    if (username.trim().length > 32) {
+      return res.status(400).json({ error: "Username cannot exceed 32 characters" });
+    }
+    if (!password || password.length < 8) {
+      return res.status(400).json({ error: "Password must be at least 8 characters long for security" });
     }
     const cleanUsername = username.trim();
     const cleanEmail = (email || "").trim().toLowerCase();
+    const rl = checkAuthRateLimit("reg_" + cleanUsername, clientIp, 8, 10 * 60 * 1e3);
+    if (!rl.allowed) {
+      return res.status(429).json({ error: `Too many registration attempts. Please wait ${rl.retryAfterSeconds} seconds.` });
+    }
     if (cleanEmail && accounts.some((a) => a.email && a.email.toLowerCase() === cleanEmail)) {
       return res.status(400).json({ error: "An account with this email address already exists" });
+    }
+    if (accounts.some((a) => a.username.toLowerCase() === cleanUsername.toLowerCase())) {
+      return res.status(400).json({ error: "This username is already taken. Please choose another one." });
     }
     let tag = generateUserTag();
     while (accounts.some((a) => a.username.toLowerCase() === cleanUsername.toLowerCase() && a.tag === tag)) {
       tag = generateUserTag();
     }
+    const hashedPassword = hashPassword(password);
     let accountId = guestId && guestId.startsWith("usr-") ? guestId : "acc-" + Date.now().toString(36);
     let existingGuest = accounts.find((a) => a.id === accountId);
     if (existingGuest) {
       existingGuest.username = cleanUsername;
       existingGuest.tag = tag;
       existingGuest.email = cleanEmail;
-      existingGuest.password = password;
+      existingGuest.password = hashedPassword;
       if (avatar) existingGuest.avatar = avatar;
       if (bio) existingGuest.bio = bio;
     } else {
@@ -1176,10 +1210,11 @@ app.post("/api/auth/register", async (req, res) => {
         username: cleanUsername,
         tag,
         email: cleanEmail,
-        password,
+        password: hashedPassword,
         avatar: avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${cleanUsername}`,
         bio: bio || "Galaxy Cord user",
         status: "online",
+        role: "member",
         createdAt: Date.now()
       };
       accounts.push(existingGuest);
@@ -1209,8 +1244,10 @@ app.post("/api/auth/register", async (req, res) => {
     }
     await neonDb.insertAccount(existingGuest);
     persistDatabase();
+    const token = await neonDb.createSession(existingGuest.id);
     res.json({
       success: true,
+      token,
       user: {
         id: existingGuest.id,
         name: existingGuest.username,
@@ -1220,31 +1257,38 @@ app.post("/api/auth/register", async (req, res) => {
         bio: existingGuest.bio,
         status: existingGuest.status,
         customStatus: existingGuest.customStatus,
+        role: existingGuest.role,
         isRegistered: true
       }
     });
   } catch (err) {
-    res.status(500).json({ error: err.message || "Failed to create account" });
+    res.status(500).json({ error: err.message || "Failed to create account in database" });
   }
 });
-app.post("/api/auth/login", (req, res) => {
+app.post("/api/auth/login", async (req, res) => {
   try {
     const identifier = req.body.identifier || req.body.username;
     const password = req.body.password;
+    const clientIp = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
     if (!identifier || !password) {
       return res.status(400).json({ error: "Please enter your username/email and password" });
     }
     const clean = identifier.trim().toLowerCase();
+    const rateLimit = checkAuthRateLimit(clean, clientIp, 6, 5 * 60 * 1e3);
+    if (!rateLimit.allowed) {
+      return res.status(429).json({
+        error: `Too many login attempts. For your security, please try again in ${rateLimit.retryAfterSeconds} seconds.`
+      });
+    }
     const account = accounts.find((a) => {
       const fullTag = `${a.username}#${a.tag}`.toLowerCase();
       return a.email && a.email.toLowerCase() === clean || fullTag === clean || a.username.toLowerCase() === clean || a.id === clean;
     });
-    if (!account) {
-      return res.status(401).json({ error: "Account not found. Please check your credentials or create an account." });
+    const isPasswordValid = account && account.password ? verifyPassword(password, account.password) : false;
+    if (!account || !isPasswordValid) {
+      return res.status(401).json({ error: "Invalid username, email, or password." });
     }
-    if (account.password && account.password !== password && password !== "password123") {
-      return res.status(401).json({ error: "Incorrect password" });
-    }
+    clearAuthRateLimit(clean, clientIp);
     if (account.isBanned) {
       if (account.banExpiresAt && Date.now() > account.banExpiresAt) {
         account.isBanned = false;
@@ -1257,10 +1301,16 @@ app.post("/api/auth/login", (req, res) => {
         });
       }
     }
+    if (account.password && !account.password.includes(":")) {
+      account.password = hashPassword(account.password);
+      await neonDb.insertAccount(account);
+    }
     account.status = "online";
     persistDatabase();
+    const token = await neonDb.createSession(account.id);
     res.json({
       success: true,
+      token,
       user: {
         id: account.id,
         name: account.username,
@@ -1277,38 +1327,72 @@ app.post("/api/auth/login", (req, res) => {
       }
     });
   } catch (err) {
-    res.status(500).json({ error: err.message || "Login failed" });
+    res.status(500).json({ error: "Authentication service error" });
   }
 });
-app.get("/api/auth/me", (req, res) => {
-  const userId = req.query.userId;
-  if (!userId) return res.status(400).json({ error: "Missing userId" });
-  const account = accounts.find((a) => a.id === userId);
-  if (!account) return res.status(404).json({ error: "User not found" });
-  res.json({
-    id: account.id,
-    name: account.username,
-    tag: account.tag,
-    email: account.email,
-    avatar: account.avatar,
-    bio: account.bio,
-    status: account.status,
-    customStatus: account.customStatus,
-    role: account.role || (account.username.toLowerCase() === "galaxy505g" ? "admin" : "member"),
-    isRegistered: !!account.email,
-    isBanned: account.isBanned,
-    banReason: account.banReason,
-    banExpiresAt: account.banExpiresAt,
-    timedOutUntil: account.timedOutUntil
-  });
+app.post("/api/auth/logout", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.startsWith("Bearer ") ? authHeader.slice(7) : req.body.token;
+    if (token) {
+      await neonDb.deleteSession(token);
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: "Logout error" });
+  }
+});
+app.get("/api/auth/me", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.startsWith("Bearer ") ? authHeader.slice(7) : req.query.token;
+    let account = null;
+    if (token) {
+      account = await neonDb.verifySession(token);
+    }
+    if (!account) {
+      const userId = req.query.userId;
+      if (userId) {
+        account = accounts.find((a) => a.id === userId);
+      }
+    }
+    if (!account) return res.status(401).json({ error: "Not authenticated or session expired" });
+    res.json({
+      id: account.id,
+      name: account.username,
+      tag: account.tag,
+      email: account.email,
+      avatar: account.avatar,
+      bio: account.bio,
+      status: account.status,
+      customStatus: account.customStatus,
+      role: account.role || (account.username.toLowerCase() === "galaxy505g" ? "admin" : "member"),
+      isRegistered: !!account.email,
+      isBanned: account.isBanned,
+      banReason: account.banReason,
+      banExpiresAt: account.banExpiresAt,
+      timedOutUntil: account.timedOutUntil
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to retrieve profile" });
+  }
 });
 app.put("/api/auth/profile", async (req, res) => {
   try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+    const sessionUser = token ? await neonDb.verifySession(token) : null;
     const { userId, name, avatar, bio, status, customStatus } = req.body;
-    if (!userId) return res.status(400).json({ error: "Missing userId" });
-    const account = accounts.find((a) => a.id === userId);
-    if (!account) return res.status(404).json({ error: "User not found" });
-    if (name) account.username = name.trim();
+    const targetId = userId || sessionUser?.id;
+    if (!targetId) {
+      return res.status(401).json({ error: "Authentication required to update profile" });
+    }
+    if (sessionUser && sessionUser.id !== targetId && sessionUser.role !== "admin") {
+      return res.status(403).json({ error: "Forbidden: You can only edit your own profile" });
+    }
+    const account = accounts.find((a) => a.id === targetId);
+    if (!account) return res.status(404).json({ error: "User not found in database" });
+    if (name && name.trim().length >= 2) account.username = name.trim();
     if (avatar) account.avatar = avatar;
     if (bio !== void 0) account.bio = bio;
     if (status) account.status = status;

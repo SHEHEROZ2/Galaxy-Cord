@@ -960,6 +960,23 @@ export default function App() {
     setCurrentUser(updated);
     localStorage.setItem('nexus_user', JSON.stringify(updated));
     socketService.updateUserProfile(updates);
+
+    const token = localStorage.getItem('nexus_token');
+    fetch('/api/auth/profile', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        userId: currentUser.id,
+        name: updates.name,
+        avatar: updates.avatar,
+        bio: updates.bio,
+        status: updates.status,
+        customStatus: updates.customStatus,
+      }),
+    }).catch(() => {});
   };
 
   const handleSendMessage = (text: string, attachments: MessageAttachment[] = []) => {
@@ -1231,8 +1248,20 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    const token = localStorage.getItem('nexus_token');
+    if (token) {
+      fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+      }).catch(() => {});
+    }
     socketService.disconnect();
     localStorage.removeItem('nexus_user');
+    localStorage.removeItem('nexus_token');
+    localStorage.removeItem('galaxycord_local_accounts');
     setCurrentUser(null);
     setFriends([]);
     setDmConversations({});

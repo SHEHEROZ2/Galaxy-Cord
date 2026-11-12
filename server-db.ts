@@ -3,6 +3,38 @@ dotenv.config({ path: '.env.local' });
 dotenv.config();
 
 import { neon, Pool } from '@neondatabase/serverless';
+import crypto from 'crypto';
+
+export function hashPassword(password: string): string {
+  if (!password) return '';
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+  return `${salt}:${hash}`;
+}
+
+export function verifyPassword(password: string, storedHashOrPlain: string): boolean {
+  if (!storedHashOrPlain || !password) return false;
+  if (!storedHashOrPlain.includes(':')) {
+    // Migration: legacy plaintext password check
+    return storedHashOrPlain === password;
+  }
+  const [salt, key] = storedHashOrPlain.split(':');
+  if (!salt || !key) return false;
+  try {
+    const keyBuffer = Buffer.from(key, 'hex');
+    const derivedKey = crypto.scryptSync(password, salt, 64);
+    return crypto.timingSafeEqual(keyBuffer, derivedKey);
+  } catch {
+    return false;
+  }
+}
+
+export interface SessionRecord {
+  token: string;
+  userId: string;
+  createdAt: number;
+  expiresAt: number;
+}
 
 export interface StoredAccount {
   id: string;
@@ -107,7 +139,7 @@ export const defaultAccounts: StoredAccount[] = [
     username: 'galaxy505g',
     tag: '5050',
     email: 'sharozayan9@gmail.com',
-    password: 'password123',
+    password: hashPassword('password123'),
     avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=galaxy505g',
     bio: 'Galaxy Cord Super Administrator 🛡️',
     status: 'online',
@@ -120,7 +152,7 @@ export const defaultAccounts: StoredAccount[] = [
     username: 'Elena Rostova',
     tag: '1001',
     email: 'elena@nexus.io',
-    password: 'password123',
+    password: hashPassword('password123'),
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop',
     bio: 'Competitive gamer & screen share streamer 🎮',
     status: 'online',
@@ -133,7 +165,7 @@ export const defaultAccounts: StoredAccount[] = [
     username: 'Marcus Vance',
     tag: '2048',
     email: 'marcus@nexus.io',
-    password: 'password123',
+    password: hashPassword('password123'),
     avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop',
     bio: 'Self-hosting enthusiast & Linux dev ⚡',
     status: 'idle',
@@ -146,7 +178,7 @@ export const defaultAccounts: StoredAccount[] = [
     username: 'CyberNova',
     tag: '7777',
     email: 'nova@nexus.io',
-    password: 'password123',
+    password: hashPassword('password123'),
     avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=CyberNova',
     bio: 'WebRTC, synthwave & open protocols 🎧',
     status: 'online',
@@ -159,7 +191,7 @@ export const defaultAccounts: StoredAccount[] = [
     username: 'Galaxy Bot',
     tag: '0001',
     email: 'bot@nexus.io',
-    password: 'bot',
+    password: hashPassword('internal-galaxy-bot-pass-9988'),
     avatar: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=100&h=100&fit=crop',
     bio: 'Official Galaxy Cord automated assistant 🤖',
     status: 'online',
@@ -373,6 +405,16 @@ class NeonDatabaseManager {
         );
       `;
 
+      // 7. Create Sessions table for secure token validation
+      await this.sql`
+        CREATE TABLE IF NOT EXISTS galaxy_sessions (
+          token VARCHAR(128) PRIMARY KEY,
+          user_id VARCHAR(128) NOT NULL,
+          created_at BIGINT NOT NULL,
+          expires_at BIGINT NOT NULL
+        );
+      `;
+
       // Test connection info
       const dbMeta = await this.sql`SELECT current_database() as db, current_user as user, version() as version;`;
       this.dbInfo = dbMeta[0] || {};
@@ -397,24 +439,31 @@ class NeonDatabaseManager {
     try {
       const rows = await this.sql`SELECT * FROM galaxy_accounts;`;
       if (rows && rows.length > 0) {
-        this.accounts = rows.map((r: any) => ({
-          id: r.id,
-          username: r.username,
-          tag: r.tag,
-          email: r.email,
-          password: r.password,
-          avatar: r.avatar,
-          bio: r.bio,
-          status: r.status,
-          customStatus: r.custom_status,
-          role: r.role,
-          createdAt: Number(r.created_at || Date.now()),
-          isBanned: r.is_banned,
-          banReason: r.ban_reason,
-          banExpiresAt: r.ban_expires_at ? Number(r.ban_expires_at) : null,
-          timedOutUntil: r.timed_out_until ? Number(r.timed_out_until) : null,
-          timeoutReason: r.timeout_reason,
-        }));
+        this.accounts = rows.map((r: any) => {
+          let pw = r.password;
+          if (pw && !pw.includes(':')) {
+            pw = hashPassword(pw);
+            this.sql`UPDATE galaxy_accounts SET password = ${pw} WHERE id = ${r.id}`.catch(() => {});
+          }
+          return {
+            id: r.id,
+            username: r.username,
+            tag: r.tag,
+            email: r.email,
+            password: pw,
+            avatar: r.avatar,
+            bio: r.bio,
+            status: r.status,
+            customStatus: r.custom_status,
+            role: r.role,
+            createdAt: Number(r.created_at || Date.now()),
+            isBanned: r.is_banned,
+            banReason: r.ban_reason,
+            banExpiresAt: r.ban_expires_at ? Number(r.ban_expires_at) : null,
+            timedOutUntil: r.timed_out_until ? Number(r.timed_out_until) : null,
+            timeoutReason: r.timeout_reason,
+          };
+        });
         console.log(`📥 Loaded ${this.accounts.length} accounts from Neon Postgres`);
       } else {
         console.log('🌱 Seeding initial accounts into Neon Postgres...');
@@ -523,6 +572,68 @@ class NeonDatabaseManager {
     }
   }
 
+  public sessions = new Map<string, SessionRecord>();
+
+  async createSession(userId: string): Promise<string> {
+    const token = 'sess_' + crypto.randomBytes(32).toString('hex');
+    const now = Date.now();
+    const expiresAt = now + 86400000 * 30; // 30 days
+    const session: SessionRecord = { token, userId, createdAt: now, expiresAt };
+    this.sessions.set(token, session);
+
+    if (this.sql) {
+      try {
+        await this.sql`
+          INSERT INTO galaxy_sessions (token, user_id, created_at, expires_at)
+          VALUES (${token}, ${userId}, ${now}, ${expiresAt})
+          ON CONFLICT (token) DO UPDATE SET user_id = EXCLUDED.user_id, expires_at = EXCLUDED.expires_at;
+        `;
+      } catch (e: any) {
+        console.error('Failed to persist session to Neon:', e.message);
+      }
+    }
+    return token;
+  }
+
+  async verifySession(token: string): Promise<StoredAccount | null> {
+    if (!token) return null;
+    const now = Date.now();
+    let sess = this.sessions.get(token);
+    if (!sess && this.sql) {
+      try {
+        const rows = await this.sql`SELECT * FROM galaxy_sessions WHERE token = ${token} AND expires_at > ${now} LIMIT 1;`;
+        if (rows && rows.length > 0) {
+          sess = {
+            token: rows[0].token,
+            userId: rows[0].user_id,
+            createdAt: Number(rows[0].created_at),
+            expiresAt: Number(rows[0].expires_at),
+          };
+          this.sessions.set(token, sess);
+        }
+      } catch (e: any) {
+        console.error('Session lookup error:', e.message);
+      }
+    }
+
+    if (!sess || sess.expiresAt <= now) {
+      this.sessions.delete(token);
+      return null;
+    }
+
+    const account = this.accounts.find((a) => a.id === sess!.userId);
+    return account || null;
+  }
+
+  async deleteSession(token: string): Promise<void> {
+    this.sessions.delete(token);
+    if (this.sql) {
+      try {
+        await this.sql`DELETE FROM galaxy_sessions WHERE token = ${token};`;
+      } catch {}
+    }
+  }
+
   public ensureGalaxyAdmin() {
     let admin = this.accounts.find(
       (a) => a.username.toLowerCase() === 'galaxy505g' || a.id === 'user-galaxy505g' || (a.email && a.email.toLowerCase() === 'sharozayan9@gmail.com')
@@ -533,7 +644,7 @@ class NeonDatabaseManager {
         username: 'galaxy505g',
         tag: '5050',
         email: 'sharozayan9@gmail.com',
-        password: 'password123',
+        password: hashPassword('password123'),
         avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=galaxy505g',
         bio: 'Galaxy Cord Super Administrator 🛡️',
         status: 'online',
@@ -545,6 +656,9 @@ class NeonDatabaseManager {
     } else {
       admin.role = 'admin';
       if (!admin.email) admin.email = 'sharozayan9@gmail.com';
+      if (admin.password && !admin.password.includes(':')) {
+        admin.password = hashPassword(admin.password);
+      }
     }
   }
 
